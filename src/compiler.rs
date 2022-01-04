@@ -1,10 +1,5 @@
+use crate::error::{raise, raise_internal, BaseContext, Context};
 use crate::lexer::Token;
-use std::process::exit;
-
-pub fn raise(err: &str) -> ! {
-    println!("{}", err);
-    exit(0);
-}
 
 pub enum Byte {
     Instruction(u8),
@@ -32,27 +27,40 @@ pub struct FunctionCall {
     args: Vec<Node>,
 }
 
-pub fn has_token(tokens: &Vec<&Token>, t: Token) -> bool {
+// compute the line of a token relative to the raw source code, as lines are actually seperated
+// by semicolons instead of newlines internally.
+pub fn compute_token_line(tokens: &Vec<Token>, base: usize, index: usize) -> usize {
+    let mut newlines = 0;
+
+    for (idx, token) in tokens.iter().enumerate() {
+        if idx == index {
+            return base + newlines;
+        } else {
+            match token {
+                Token::Newline => newlines += 1,
+                _ => {}
+            }
+        }
+    }
+
+    return base;
+}
+
+pub fn has_operators(tokens: &Vec<&Token>, operators: Vec<&str>) -> bool {
     let mut bracket_stack: Vec<&Token> = vec![];
 
     for token in tokens {
         match token {
             Token::LParen | Token::LCurly | Token::LSquare => bracket_stack.push(*token),
             Token::RParen | Token::RCurly | Token::RSquare => {
-                let last_token = bracket_stack.pop();
-
-                match last_token {
-                    Option::Some(last_token) => {
-                        if !(*last_token == get_opposite(*token)) {
-                            raise("Unmatched bracket.")
-                        }
-                    }
-                    Option::None => raise("Unmatched bracket."),
-                }
+                bracket_stack.pop();
             }
             _ => {
-                if *token == &t && bracket_stack.is_empty() {
-                    return true;
+                for operator in &operators {
+                    if *token == &Token::Operator(operator.to_string()) && bracket_stack.is_empty()
+                    {
+                        return true;
+                    }
                 }
             }
         }
@@ -71,15 +79,19 @@ fn get_opposite(token: &Token) -> Token {
         &Token::RParen => Token::LParen,
         &Token::RSquare => Token::LSquare,
 
-        _ => raise("Err#0001 - An unexpected error has occured."),
+        _ => raise_internal("Err 0001 - An unexpected error has occured."),
     }
 }
 
-fn parse_function_arguments(tokens: &Vec<&Token>) -> Vec<Node> {
-    return parse_list(tokens);
+fn parse_function_arguments(
+    tokens: &Vec<&Token>,
+    start_idx: usize,
+    context: &BaseContext,
+) -> Vec<Node> {
+    return parse_list(tokens, start_idx, context);
 }
 
-fn parse_list(tokens: &Vec<&Token>) -> Vec<Node> {
+fn parse_list(tokens: &Vec<&Token>, start_idx: usize, context: &BaseContext) -> Vec<Node> {
     let mut elements: Vec<Vec<&Token>> = vec![vec![]];
     let mut bracket_stack: Vec<&Token> = vec![];
 
@@ -87,24 +99,15 @@ fn parse_list(tokens: &Vec<&Token>) -> Vec<Node> {
         match token {
             Token::LParen | Token::LCurly | Token::LSquare => {
                 bracket_stack.push(*token);
-            
+
                 let arg_len = elements.len() - 1;
                 elements[arg_len].push(*token);
-            },
+            }
             Token::RParen | Token::RCurly | Token::RSquare => {
-                let last_token = bracket_stack.pop();
+                bracket_stack.pop();
 
                 let arg_len = elements.len() - 1;
                 elements[arg_len].push(*token);
-
-                match last_token {
-                    Option::Some(last_token) => {
-                        if !(*last_token == get_opposite(*token)) {
-                            raise("Unmatched bracket.")
-                        }
-                    }
-                    Option::None => raise("Unmatched bracket."),
-                }
             }
             Token::Operator(op) => {
                 if op == "," && bracket_stack.is_empty() {
@@ -124,13 +127,13 @@ fn parse_list(tokens: &Vec<&Token>) -> Vec<Node> {
     let mut ret: Vec<Node> = vec![];
 
     for element in elements {
-        ret.push(parse_expression(element));
+        ret.push(parse_expression(element, start_idx, context));
     }
 
     return ret;
 }
 
-fn parse_function_call(tokens: &Vec<&Token>) -> Node {
+fn parse_function_call(tokens: &Vec<&Token>, start_idx: usize, context: &BaseContext) -> Node {
     let mut function_name = String::from("NaN");
 
     if let Token::Identifier(identifier) = tokens[0] {
@@ -147,51 +150,133 @@ fn parse_function_call(tokens: &Vec<&Token>) -> Node {
                     })
                 }
                 _ => {
-                    let arguments = parse_function_arguments(&tokens[2..tokens.len() - 1].to_vec());
+                    let arguments = parse_function_arguments(
+                        &tokens[2..tokens.len() - 1].to_vec(),
+                        start_idx,
+                        context,
+                    );
                     return Node::Function(FunctionCall {
                         name: function_name,
                         args: arguments,
                     });
                 }
             },
-            _ => raise("Invalid syntax."),
+            _ => {
+                let line_idx = compute_token_line(&context.tokens, context.base, start_idx);
+                raise(
+                    "Invalid syntax. Perhaps you forgot a comma?",
+                    Context {
+                        idx: line_idx,
+                        line: context.source[line_idx].clone(),
+                        pointer: Option::None,
+                    },
+                )
+            }
         }
     } else {
-        raise("Expected parenthesis after function name.");
+        let line_idx = compute_token_line(&context.tokens, context.base, start_idx);
+        raise(
+            "Expected parenthesis after function name.",
+            Context {
+                idx: line_idx,
+                line: context.source[line_idx].clone(),
+                pointer: Option::None,
+            },
+        );
     }
 }
 
-fn parse_value(tokens: &Vec<&Token>) -> Node {
+fn parse_value(tokens: &Vec<&Token>, start_idx: usize, context: &BaseContext) -> Node {
     match tokens.len() {
-        0 => raise("Expected value"),
+        0 => {
+            let line_idx = compute_token_line(&context.tokens, context.base, start_idx);
+            raise(
+                "Expected value",
+                Context {
+                    idx: line_idx,
+                    line: context.source[line_idx].clone(),
+                    pointer: Option::None,
+                },
+            )
+        }
         _ => match tokens[0] {
             Token::Str(_) | Token::Int(_) | Token::Float(_) | Token::FormattedStr(_) => {
                 match tokens.len() {
                     1 => return Node::Unary((*(*tokens)[0]).clone()),
-                    _ => raise("Invalid syntax."),
+                    _ => {
+                        let line_idx = compute_token_line(&context.tokens, context.base, start_idx);
+                        raise(
+                            "Expected only one value",
+                            Context {
+                                idx: line_idx,
+                                line: context.source[line_idx].clone(),
+                                pointer: Option::None,
+                            },
+                        )
+                    }
                 }
             }
 
             Token::Identifier(_) => match tokens.len() {
                 1 => return Node::Unary((*(*tokens)[0]).clone()),
-                2 => raise("Invalid syntax."),
-                _ => return parse_function_call(tokens),
-            },
-            Token::LSquare => {
-                match tokens[tokens.len() - 1] {
-                    Token::RSquare => {
-                        let list: Vec<Node> = parse_list(&tokens[1..tokens.len() - 1].to_vec());
-                        return Node::List(list)
-                    },
-                    _ => raise("Invalid syntax.")
+                2 => {
+                    let message: &str;
+
+                    match tokens[1] {
+                        Token::LParen => {
+                            message =
+                                "Unexpected opening parenthesis. Perhaps you forgot to close them?";
+                        }
+                        _ => message = "Expected only one token. Perhaps you forgot a comma?",
+                    }
+
+                    let line_idx = compute_token_line(&context.tokens, context.base, start_idx);
+
+                    raise(
+                        message,
+                        Context {
+                            idx: line_idx,
+                            line: context.source[line_idx].clone(),
+                            pointer: Option::None,
+                        },
+                    );
                 }
-             },
-            _ => raise("Unexpected token."),
+                _ => return parse_function_call(tokens, start_idx, context),
+            },
+            Token::LSquare => match tokens[tokens.len() - 1] {
+                Token::RSquare => {
+                    let list: Vec<Node> =
+                        parse_list(&tokens[1..tokens.len() - 1].to_vec(), start_idx, context);
+                    return Node::List(list);
+                }
+                _ => {
+                    let line_idx = compute_token_line(&context.tokens, context.base, start_idx);
+                    raise(
+                        "Invalid syntax. Perhaps you forgot a comma?",
+                        Context {
+                            idx: line_idx,
+                            line: context.source[line_idx].clone(),
+                            pointer: Option::None,
+                        },
+                    )
+                }
+            },
+            _ => {
+                let line_idx = compute_token_line(&context.tokens, context.base, start_idx);
+                raise(
+                    "Unexpected token.",
+                    Context {
+                        idx: line_idx,
+                        line: context.source[line_idx].clone(),
+                        pointer: Option::None,
+                    },
+                )
+            }
         },
     }
 }
 
-fn parse_mul_div(tokens: Vec<&Token>) -> Node {
+fn parse_mul_div(tokens: Vec<&Token>, start_idx: usize, context: &BaseContext) -> Node {
     let mut rnode: Node = Node::Unary(Token::Int(0));
     let mut lnode: Node = Node::Unary(Token::Int(0));
 
@@ -201,18 +286,16 @@ fn parse_mul_div(tokens: Vec<&Token>) -> Node {
         match token {
             Token::Operator(op) => {
                 if *op == String::from("*") || *op == String::from("/") {
-                    lnode = parse_value(&tokens[0..idx].to_vec());
+                    lnode = parse_value(&tokens[0..idx].to_vec(), start_idx, context);
 
                     operator = op.to_string();
 
                     let right = tokens[idx + 1..tokens.len()].to_vec();
 
-                    if has_token(&right, Token::Operator("*".to_string()))
-                        | has_token(&right, Token::Operator("/".to_string()))
-                    {
-                        rnode = parse_mul_div(right);
+                    if has_operators(&right, vec!["*", "/"]) {
+                        rnode = parse_mul_div(right, start_idx, context);
                     } else {
-                        rnode = parse_value(&right)
+                        rnode = parse_value(&right, start_idx, context)
                     }
                 }
             }
@@ -227,16 +310,14 @@ fn parse_mul_div(tokens: Vec<&Token>) -> Node {
     }));
 }
 
-pub fn parse_expression(tokens: Vec<&Token>) -> Node {
-    if has_token(&tokens, Token::Operator("+".to_string()))
-        | has_token(&tokens, Token::Operator("-".to_string()))
-    {
+pub fn parse_expression(tokens: Vec<&Token>, start_idx: usize, context: &BaseContext) -> Node {
+    if has_operators(&tokens, vec!["+", "-"]) {
         let mut left_tokens: Vec<&Token> = vec![];
         let mut bracket_stack: Vec<&Token> = vec![];
 
         let mut operator: String = " ".to_string();
 
-        for token in (&tokens).into_iter() {
+        for (idx, token) in (&tokens).into_iter().enumerate() {
             if let Token::Operator(ref op) = *token {
                 if (op == "+" || op == "-") && bracket_stack.is_empty() {
                     operator = op.to_string();
@@ -253,17 +334,8 @@ pub fn parse_expression(tokens: Vec<&Token>) -> Node {
                     || *token == &Token::RParen
                     || *token == &Token::RSquare
                 {
-                    let last_token = bracket_stack.pop();
+                    bracket_stack.pop();
                     left_tokens.push(*token);
-
-                    match last_token {
-                        Option::Some(last_token) => {
-                            if !(*last_token == get_opposite(*token)) {
-                                raise("Unmatched bracket.")
-                            }
-                        }
-                        Option::None => raise("Unmatched bracket."),
-                    }
                 }
 
                 left_tokens.push(token);
@@ -275,25 +347,19 @@ pub fn parse_expression(tokens: Vec<&Token>) -> Node {
         let right_node: Node;
         let left_node: Node;
 
-        if has_token(&left_tokens, Token::Operator("*".to_string()))
-            | has_token(&left_tokens, Token::Operator("/".to_string()))
-        {
-            left_node = parse_mul_div(left_tokens);
+        if has_operators(&left_tokens, vec!["*", "/"]) {
+            left_node = parse_mul_div(left_tokens, start_idx, context);
         } else {
-            left_node = parse_value(&left_tokens);
+            left_node = parse_value(&left_tokens, start_idx, context);
         }
 
-        if has_token(&right_tokens, Token::Operator("+".to_string()))
-            | has_token(&right_tokens, Token::Operator("-".to_string()))
-        {
-            right_node = parse_expression(right_tokens);
+        if has_operators(&right_tokens, vec!["+", "-"]) {
+            right_node = parse_expression(right_tokens, start_idx, context);
         } else {
-            if has_token(&right_tokens, Token::Operator("*".to_string()))
-                | has_token(&right_tokens, Token::Operator("/".to_string()))
-            {
-                right_node = parse_mul_div(right_tokens);
+            if has_operators(&right_tokens, vec!["*", "/"]) {
+                right_node = parse_mul_div(right_tokens, start_idx, context);
             } else {
-                right_node = parse_value(&right_tokens);
+                right_node = parse_value(&right_tokens, start_idx, context);
             }
         }
 
@@ -302,15 +368,47 @@ pub fn parse_expression(tokens: Vec<&Token>) -> Node {
             b: right_node,
             o: operator,
         }));
-    } else if has_token(&tokens, Token::Operator("*".to_string()))
-        | has_token(&tokens, Token::Operator("/".to_string()))
-    {
-        return parse_mul_div(tokens);
+    } else if has_operators(&tokens, vec!["*", "/"]) {
+        return parse_mul_div(tokens, start_idx, context);
     } else {
-        return parse_value(&tokens);
+        return parse_value(&tokens, start_idx, context);
     }
 }
 
 //fn compile_expression(tree: Node) -> Vec<u8> { }
+
+pub fn parse(tokens: Vec<Vec<Token>>, source: String) -> Vec<Node> {
+    let temp_lines: Vec<&str> = source.split("\n").collect();
+    let mut lines: Vec<String> = vec![];
+
+    let mut nodes: Vec<Node> = vec![];
+
+    for line in temp_lines {
+        lines.push(line.to_string());
+    }
+
+    for (idx, line) in tokens.iter().enumerate() {
+        if line.is_empty() { continue; }
+        let mut ref_line: Vec<&Token> = vec![];
+
+        for token in line {
+            ref_line.push(&token)
+        }
+
+        let node = parse_expression(
+            ref_line,
+            0,
+            &BaseContext {
+                tokens: (*line).clone(),
+                base: idx,
+                source: lines.clone(),
+            },
+        );
+
+        nodes.push(node)
+    }
+
+    return nodes;
+}
 
 //pub fn compile(tokens: Vec<Token>) -> Vec<u8> { }
