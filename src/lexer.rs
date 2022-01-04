@@ -5,6 +5,7 @@ use std::process::exit;
 pub enum Token {
     Str(String),
     FormattedStr(String),
+    Keyword(String),
 
     Int(i32),
     Float(f32),
@@ -53,6 +54,8 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
     let mut line_tokens: &mut Vec<Token> = tokens.last_mut().unwrap();
     let mut line_idx: usize = 0;
 
+    let identifiers: Vec<&str> = vec!["let"];
+
     source.push(' ');
     let lines: Vec<&str> = source.split("\n").collect();
     let line: &str = lines[line_idx];
@@ -77,7 +80,7 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
             }
         }
         // handle operators
-        else if "+-*/><=!,".contains(ch) {
+        else if "+-*/><=!,^%".contains(ch) {
             let following = source.chars().nth(i + 1);
 
             match following {
@@ -144,8 +147,11 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
             for _ in 0..i - 1 {
                 source_iter.next();
             }
-
-            line_tokens.push(Token::Identifier(identifier));
+            
+            match identifiers.contains(&identifier.as_str()) {
+                true => line_tokens.push(Token::Keyword(identifier)),
+                false => line_tokens.push(Token::Identifier(identifier))
+            }
         }
         // handle integers and floats
         else if "1234567890.".contains(ch) {
