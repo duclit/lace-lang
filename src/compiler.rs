@@ -1,4 +1,4 @@
-use crate::error::{raise, raise_internal, BaseContext, Context};
+use crate::error::{raise, BaseContext, Context};
 use crate::lexer::Token;
 
 pub enum Byte {
@@ -9,7 +9,7 @@ pub enum Byte {
 #[derive(Debug)]
 pub enum Node {
     Unary(Token),
-    Function(FunctionCall),
+    FunctionCall(FunctionCall),
     List(Vec<Node>),
     Binary(Box<BinaryNode>),
 }
@@ -67,20 +67,6 @@ pub fn has_operators(tokens: &Vec<&Token>, operators: Vec<&str>) -> bool {
     }
 
     return false;
-}
-
-fn get_opposite(token: &Token) -> Token {
-    match token {
-        &Token::LCurly => Token::RCurly,
-        &Token::LParen => Token::RParen,
-        &Token::LSquare => Token::RSquare,
-
-        &Token::RCurly => Token::LCurly,
-        &Token::RParen => Token::LParen,
-        &Token::RSquare => Token::LSquare,
-
-        _ => raise_internal("Err 0001 - An unexpected error has occured."),
-    }
 }
 
 fn parse_function_arguments(
@@ -144,7 +130,7 @@ fn parse_function_call(tokens: &Vec<&Token>, start_idx: usize, context: &BaseCon
         match tokens[tokens.len() - 1] {
             Token::RParen => match tokens.len() {
                 3 => {
-                    return Node::Function(FunctionCall {
+                    return Node::FunctionCall(FunctionCall {
                         name: function_name,
                         args: vec![],
                     })
@@ -155,7 +141,7 @@ fn parse_function_call(tokens: &Vec<&Token>, start_idx: usize, context: &BaseCon
                         start_idx,
                         context,
                     );
-                    return Node::Function(FunctionCall {
+                    return Node::FunctionCall(FunctionCall {
                         name: function_name,
                         args: arguments,
                     });
@@ -190,8 +176,9 @@ fn parse_value(tokens: &Vec<&Token>, start_idx: usize, context: &BaseContext) ->
     match tokens.len() {
         0 => {
             let line_idx = compute_token_line(&context.tokens, context.base, start_idx);
+
             raise(
-                "Expected value",
+                "Expected string, int, float, list or function call, got operator.",
                 Context {
                     idx: line_idx,
                     line: context.source[line_idx].clone(),
@@ -206,7 +193,7 @@ fn parse_value(tokens: &Vec<&Token>, start_idx: usize, context: &BaseContext) ->
                     _ => {
                         let line_idx = compute_token_line(&context.tokens, context.base, start_idx);
                         raise(
-                            "Expected only one value",
+                            "Expected only one value. Perhaps you forgot a comma?",
                             Context {
                                 idx: line_idx,
                                 line: context.source[line_idx].clone(),
@@ -227,7 +214,7 @@ fn parse_value(tokens: &Vec<&Token>, start_idx: usize, context: &BaseContext) ->
                             message =
                                 "Unexpected opening parenthesis. Perhaps you forgot to close them?";
                         }
-                        _ => message = "Expected only one token. Perhaps you forgot a comma?",
+                        _ => message = "Expected only one value. Perhaps you forgot a comma?",
                     }
 
                     let line_idx = compute_token_line(&context.tokens, context.base, start_idx);
@@ -261,10 +248,27 @@ fn parse_value(tokens: &Vec<&Token>, start_idx: usize, context: &BaseContext) ->
                     )
                 }
             },
+            Token::Newline => match tokens.len() {
+                1 => {
+                    let line_idx = compute_token_line(&context.tokens, context.base, start_idx);
+
+                    raise(
+                        "Expected string, int, float, list or function call.",
+                        Context {
+                            idx: line_idx,
+                            line: context.source[line_idx].clone(),
+                            pointer: Option::None,
+                        },
+                    );
+                }
+                _ => {
+                    return parse_value(&tokens[1..tokens.len()].to_vec(), start_idx, context);
+                }
+            },
             _ => {
                 let line_idx = compute_token_line(&context.tokens, context.base, start_idx);
                 raise(
-                    "Unexpected token.",
+                    "Expected string, int, float, list or function call.",
                     Context {
                         idx: line_idx,
                         line: context.source[line_idx].clone(),
@@ -285,17 +289,17 @@ fn parse_mul_div(tokens: Vec<&Token>, start_idx: usize, context: &BaseContext) -
     for (idx, token) in (&tokens).into_iter().enumerate() {
         match token {
             Token::Operator(op) => {
-                if *op == String::from("*") || *op == String::from("/") {
+                if vec!["*", "/", "%", "^", ">>", "<<"].contains(&op.as_str()) {
                     lnode = parse_value(&tokens[0..idx].to_vec(), start_idx, context);
 
                     operator = op.to_string();
 
                     let right = tokens[idx + 1..tokens.len()].to_vec();
 
-                    if has_operators(&right, vec!["*", "/"]) {
-                        rnode = parse_mul_div(right, start_idx, context);
+                    if has_operators(&right, vec!["*", "/", "%", "^", ">>", "<<"]) {
+                        rnode = parse_mul_div(right, start_idx + idx, context);
                     } else {
-                        rnode = parse_value(&right, start_idx, context)
+                        rnode = parse_value(&right, start_idx + idx, context)
                     }
                 }
             }
@@ -317,7 +321,7 @@ pub fn parse_expression(tokens: Vec<&Token>, start_idx: usize, context: &BaseCon
 
         let mut operator: String = " ".to_string();
 
-        for (idx, token) in (&tokens).into_iter().enumerate() {
+        for (_idx, token) in (&tokens).into_iter().enumerate() {
             if let Token::Operator(ref op) = *token {
                 if (op == "+" || op == "-") && bracket_stack.is_empty() {
                     operator = op.to_string();
@@ -343,23 +347,24 @@ pub fn parse_expression(tokens: Vec<&Token>, start_idx: usize, context: &BaseCon
         }
 
         let right_tokens = tokens[left_tokens.len() + 1..tokens.len()].to_vec();
+        let left_tokens_len = left_tokens.len();
 
         let right_node: Node;
         let left_node: Node;
 
-        if has_operators(&left_tokens, vec!["*", "/"]) {
+        if has_operators(&left_tokens, vec!["*", "/", "%", "^", "<<", ">>"]) {
             left_node = parse_mul_div(left_tokens, start_idx, context);
         } else {
             left_node = parse_value(&left_tokens, start_idx, context);
         }
 
         if has_operators(&right_tokens, vec!["+", "-"]) {
-            right_node = parse_expression(right_tokens, start_idx, context);
+            right_node = parse_expression(right_tokens, start_idx + left_tokens_len, context);
         } else {
-            if has_operators(&right_tokens, vec!["*", "/"]) {
-                right_node = parse_mul_div(right_tokens, start_idx, context);
+            if has_operators(&right_tokens, vec!["*", "/", "%", "^", "<<", ">>"]) {
+                right_node = parse_mul_div(right_tokens, start_idx + left_tokens_len, context);
             } else {
-                right_node = parse_value(&right_tokens, start_idx, context);
+                right_node = parse_value(&right_tokens, start_idx + left_tokens_len, context);
             }
         }
 
@@ -368,7 +373,7 @@ pub fn parse_expression(tokens: Vec<&Token>, start_idx: usize, context: &BaseCon
             b: right_node,
             o: operator,
         }));
-    } else if has_operators(&tokens, vec!["*", "/"]) {
+    } else if has_operators(&tokens, vec!["*", "/", "%", "^", "<<", ">>"]) {
         return parse_mul_div(tokens, start_idx, context);
     } else {
         return parse_value(&tokens, start_idx, context);
@@ -388,7 +393,9 @@ pub fn parse(tokens: Vec<Vec<Token>>, source: String) -> Vec<Node> {
     }
 
     for (idx, line) in tokens.iter().enumerate() {
-        if line.is_empty() { continue; }
+        if line.is_empty() {
+            continue;
+        }
         let mut ref_line: Vec<&Token> = vec![];
 
         for token in line {
