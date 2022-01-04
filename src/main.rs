@@ -1,10 +1,11 @@
 mod compiler;
+mod error;
 mod lexer;
 
 use std::fs;
 use std::{env, process::exit};
 
-use crate::compiler::parse_expression;
+use crate::compiler::parse;
 use crate::lexer::{tokenize, Token};
 
 fn main() {
@@ -21,10 +22,9 @@ fn main() {
 
             match data {
                 Result::Ok(data) => {
-                    println!(
-                        "{:#?}",
-                        parse_expression(tokenize(data)[0].iter().collect::<Vec<&Token>>())
-                    )
+                    let tokens = tokenize(data.clone());
+
+                    println!("{:#?}", parse(tokens, data))
                 }
                 Result::Err(_) => {
                     println!("😐 Unable to read file");
