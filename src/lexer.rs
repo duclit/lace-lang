@@ -1,3 +1,4 @@
+use crate::error::{raise, Context};
 use std::process::exit;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -15,6 +16,7 @@ pub enum Token {
     RCurly,
     LSquare,
     RSquare,
+    Newline,
 
     Operator(String),
 }
@@ -26,11 +28,6 @@ enum Scanning {
     Str(char),
     Int,
     Identifier,
-}
-
-pub fn raise(err: &str) -> ! {
-    println!("{}", err);
-    exit(0);
 }
 
 fn grab<F: Fn(char) -> bool>(source: &String, i: usize, check: F) -> (String, usize) {
@@ -54,14 +51,17 @@ fn grab<F: Fn(char) -> bool>(source: &String, i: usize, check: F) -> (String, us
 pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
     let mut tokens: Vec<Vec<Token>> = vec![vec![]];
     let mut line_tokens: &mut Vec<Token> = tokens.last_mut().unwrap();
-    let mut line: usize = 0;
+    let mut line_idx: usize = 0;
 
     source.push(' ');
+    let lines: Vec<&str> = source.split("\n").collect();
+    let line: &str = lines[line_idx];
     let mut source_iter = source.char_indices();
 
     while let Some((i, ch)) = source_iter.next() {
         if ch == '\n' {
-            line += 1;
+            line_idx += 1;
+            line_tokens.push(Token::Newline)
         } else if ch == ';' {
             tokens.push(Vec::new());
             line_tokens = tokens.last_mut().unwrap();
@@ -111,7 +111,14 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
                         line_tokens.push(Token::Operator(String::from(ch)));
                     }
                 }
-                Option::None => raise("Expected expression at EOF"),
+                Option::None => raise(
+                    "Expected value",
+                    Context {
+                        line: line.to_string(),
+                        idx: line_idx,
+                        pointer: Option::None,
+                    },
+                ),
             }
         }
         // handle strings
@@ -142,9 +149,9 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
         }
         // handle integers and floats
         else if "1234567890.".contains(ch) {
-            let (int, i) = grab(&source, i - 1, |cu| "1234567890.".contains(cu));
+            let (int, r) = grab(&source, i - 1, |cu| "1234567890.".contains(cu));
 
-            for _ in 0..i - 1 {
+            for _ in 0..r - 1 {
                 source_iter.next();
             }
 
@@ -153,7 +160,16 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
             match count {
                 0 => line_tokens.push(Token::Int(int.parse::<i32>().unwrap())),
                 1 => line_tokens.push(Token::Float(int.parse::<f32>().unwrap())),
-                _ => raise("Float can only have one decimal point"),
+                _ => raise(
+                    "Float can only have one decimal point",
+                    Context {
+                        line: line.to_string(),
+                        idx: line_idx,
+                        pointer: Option::Some(
+                            i + (int.len() - int.match_indices(".").nth(1).unwrap().0),
+                        ),
+                    },
+                ),
             }
         }
     }
