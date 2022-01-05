@@ -1,8 +1,7 @@
 use crate::error::{raise, Context};
-use std::process::exit;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Token {
+pub enum Value {
     Str(String),
     FormattedStr(String),
     Keyword(String),
@@ -17,18 +16,14 @@ pub enum Token {
     RCurly,
     LSquare,
     RSquare,
-    Newline,
 
     Operator(String),
 }
 
-#[allow(dead_code)]
-#[derive(Debug, PartialEq, Eq)]
-enum Scanning {
-    None,
-    Str(char),
-    Int,
-    Identifier,
+#[derive(Debug, Clone, PartialEq)]
+pub struct Token {
+    pub value: Value,
+    pub line: usize,
 }
 
 fn grab<F: Fn(char) -> bool>(source: &String, i: usize, check: F) -> (String, usize) {
@@ -49,6 +44,10 @@ fn grab<F: Fn(char) -> bool>(source: &String, i: usize, check: F) -> (String, us
     return (captured, idx);
 }
 
+pub fn construct(value: Value, line: usize) -> Token {
+    Token { value, line }
+}
+
 pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
     let mut tokens: Vec<Vec<Token>> = vec![vec![]];
     let mut line_tokens: &mut Vec<Token> = tokens.last_mut().unwrap();
@@ -64,18 +63,17 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
     while let Some((i, ch)) = source_iter.next() {
         if ch == '\n' {
             line_idx += 1;
-            line_tokens.push(Token::Newline)
         } else if ch == ';' {
             tokens.push(Vec::new());
             line_tokens = tokens.last_mut().unwrap();
         } else if "()[]{}".contains(ch) {
             match ch {
-                '(' => line_tokens.push(Token::LParen),
-                ')' => line_tokens.push(Token::RParen),
-                '[' => line_tokens.push(Token::LSquare),
-                ']' => line_tokens.push(Token::RSquare),
-                '{' => line_tokens.push(Token::LCurly),
-                '}' => line_tokens.push(Token::RCurly),
+                '(' => line_tokens.push(construct(Value::LParen, line_idx)),
+                ')' => line_tokens.push(construct(Value::RParen, line_idx)),
+                '[' => line_tokens.push(construct(Value::LSquare, line_idx)),
+                ']' => line_tokens.push(construct(Value::RSquare, line_idx)),
+                '{' => line_tokens.push(construct(Value::LCurly, line_idx)),
+                '}' => line_tokens.push(construct(Value::RCurly, line_idx)),
                 _ => {}
             }
         }
@@ -86,13 +84,16 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
             match following {
                 Option::Some(op) => {
                     if op == '=' {
-                        line_tokens.push(Token::Operator(format!("{}=", ch)));
+                        line_tokens.push(construct(Value::Operator(format!("{}=", ch)), line_idx));
                         source_iter.next();
                     } else if op == '>' && ch == '-' {
-                        line_tokens.push(Token::Operator(format!("->")));
+                        line_tokens.push(construct(Value::Operator(format!("->")), line_idx));
                         source_iter.next();
                     } else if "<>".contains(op) && op == ch {
-                        line_tokens.push(Token::Operator(format!("{}{}", op, ch)));
+                        line_tokens.push(construct(
+                            Value::Operator(format!("{}{}", op, ch)),
+                            line_idx,
+                        ));
                         source_iter.next();
                     } else if ch == '/' && op == '/' {
                         loop {
@@ -109,9 +110,9 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
                             }
                         }
                     } else if ch == ',' {
-                        line_tokens.push(Token::Operator(String::from(",")));
+                        line_tokens.push(construct(Value::Operator(String::from(",")), line_idx));
                     } else {
-                        line_tokens.push(Token::Operator(String::from(ch)));
+                        line_tokens.push(construct(Value::Operator(String::from(ch)), line_idx));
                     }
                 }
                 Option::None => raise(
@@ -133,9 +134,9 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
             }
 
             match ch {
-                '\'' => line_tokens.push(Token::Str(string)),
-                '"' => line_tokens.push(Token::Str(string)),
-                '`' => line_tokens.push(Token::FormattedStr(string)),
+                '\'' => line_tokens.push(construct(Value::Str(string), line_idx)),
+                '"' => line_tokens.push(construct(Value::Str(string), line_idx)),
+                '`' => line_tokens.push(construct(Value::FormattedStr(string), line_idx)),
                 _ => {}
             }
         }
@@ -147,10 +148,10 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
             for _ in 0..i - 1 {
                 source_iter.next();
             }
-            
+
             match identifiers.contains(&identifier.as_str()) {
-                true => line_tokens.push(Token::Keyword(identifier)),
-                false => line_tokens.push(Token::Identifier(identifier))
+                true => line_tokens.push(construct(Value::Keyword(identifier), line_idx)),
+                false => line_tokens.push(construct(Value::Identifier(identifier), line_idx)),
             }
         }
         // handle integers and floats
@@ -164,8 +165,11 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
             let count = int.matches(".").count();
 
             match count {
-                0 => line_tokens.push(Token::Int(int.parse::<i32>().unwrap())),
-                1 => line_tokens.push(Token::Float(int.parse::<f32>().unwrap())),
+                0 => line_tokens.push(construct(Value::Int(int.parse::<i32>().unwrap()), line_idx)),
+                1 => line_tokens.push(construct(
+                    Value::Float(int.parse::<f32>().unwrap()),
+                    line_idx,
+                )),
                 _ => raise(
                     "Float can only have one decimal point",
                     Context {
