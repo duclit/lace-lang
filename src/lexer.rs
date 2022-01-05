@@ -102,6 +102,7 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
                             match ch {
                                 Option::Some((_idx, ch)) => {
                                     if ch == '\n' {
+                                        line_idx += 1;
                                         break;
                                     }
                                 }
