@@ -6,8 +6,8 @@ pub enum Value {
     FormattedStr(String),
     Keyword(String),
 
-    Int(i32),
-    Float(f32),
+    Int(i64),
+    Float(f64),
     Identifier(String),
 
     LParen,
@@ -166,11 +166,28 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
             let count = int.matches(".").count();
 
             match count {
-                0 => line_tokens.push(construct(Value::Int(int.parse::<i32>().unwrap()), line_idx)),
-                1 => line_tokens.push(construct(
-                    Value::Float(int.parse::<f32>().unwrap()),
-                    line_idx,
-                )),
+                0 => match int.parse::<i64>() {
+                    Result::Ok(int) => line_tokens.push(construct(Value::Int(int), line_idx)),
+                    Result::Err(_) => raise(
+                        "Integer literal is too large.",
+                        Context {
+                            line: line.to_string(),
+                            idx: line_idx,
+                            pointer: Option::None,
+                        },
+                    ),
+                },
+                1 => match int.parse::<f64>() {
+                    Result::Ok(float) => line_tokens.push(construct(Value::Float(float), line_idx)),
+                    Result::Err(_) => raise(
+                        "Float literal is too large.",
+                        Context {
+                            line: line.to_string(),
+                            idx: line_idx,
+                            pointer: Option::None,
+                        },
+                    ),
+                },
                 _ => raise(
                     "Float can only have one decimal point",
                     Context {
