@@ -1,10 +1,8 @@
 use crate::error::{raise, BaseContext, Context};
 use crate::lexer::{Token, Value};
 
-pub enum Byte {
-    Instruction(u8),
-    Address(u32),
-}
+use std::mem::discriminant;
+use std::process::exit;
 
 #[derive(Debug)]
 pub enum Node {
@@ -12,6 +10,7 @@ pub enum Node {
     FunctionCall(FunctionCall),
     List(Vec<Node>),
     Binary(Box<BinaryNode>),
+    Assignment(VariableAssignment),
 }
 
 #[derive(Debug)]
@@ -25,6 +24,12 @@ pub struct BinaryNode {
 pub struct FunctionCall {
     name: String,
     args: Vec<Node>,
+}
+
+#[derive(Debug)]
+pub struct VariableAssignment {
+    name: String,
+    value: Box<Node>,
 }
 
 pub fn has_operators(tokens: &Vec<&Token>, operators: Vec<&str>) -> bool {
@@ -148,8 +153,8 @@ fn parse_value(tokens: &Vec<&Token>, context: &BaseContext) -> Node {
         0 => raise(
             "Expected string, int, float, list or function call.",
             Context {
-                idx: 0,
-                line: context.source[0].clone(),
+                idx: context.base,
+                line: context.source[context.base].clone(),
                 pointer: Option::None,
             },
         ),
@@ -315,7 +320,85 @@ pub fn parse_expression(tokens: Vec<&Token>, context: &BaseContext) -> Node {
     }
 }
 
-//fn compile_expression(tree: Node) -> Vec<u8> { }
+fn expect(
+    tokens: &Vec<Token>,
+    idx: usize,
+    value: Value,
+    context: &BaseContext,
+    exact: bool,
+) -> Result<(), Context> {
+    if tokens.len() < idx + 2 {
+        return Result::Err(Context {
+            idx: tokens[tokens.len() - 1].line,
+            line: context.source[tokens[tokens.len() - 1].line].clone(),
+            pointer: Option::None,
+        });
+    }
+
+    let token = &tokens[idx + 1];
+
+    if (!exact && discriminant(&token.value) == discriminant(&value))
+        || (exact && token.value == value)
+    {
+        return Result::Ok(());
+    } else {
+        return Result::Err(Context {
+            idx: token.line,
+            line: context.source[token.line].clone(),
+            pointer: Option::None,
+        });
+    }
+}
+
+pub fn parse_assignment(tokens: &Vec<Token>, base_context: &BaseContext) -> Node {
+    match expect(
+        tokens,
+        0,
+        Value::Identifier(String::new()),
+        base_context,
+        false,
+    ) {
+        Ok(_) => {}
+        Err(context) => raise("Expected identifier.", context),
+    }
+
+    match expect(
+        tokens,
+        1,
+        Value::Operator(String::from("=")),
+        base_context,
+        true,
+    ) {
+        Ok(_) => {}
+        Err(context) => match tokens.len() {
+            2 => raise("Uninitialized variables are not allowed.", context),
+            _ => raise("Expected assignment operator (`=`).", context),
+        },
+    }
+
+    if tokens.len() >= 4 {
+        if let Value::Identifier(identifier) = &tokens[1].value {
+            let value =
+                parse_expression(tokens.iter().skip(3).collect::<Vec<&Token>>(), base_context);
+
+            return Node::Assignment(VariableAssignment {
+                name: (*identifier).clone(),
+                value: Box::new(value),
+            });
+        } else {
+            exit(0) // this will literally never happen
+        }
+    } else {
+        raise(
+            "Expected expression.",
+            Context {
+                idx: tokens[2].line,
+                line: base_context.source[tokens[2].line].clone(),
+                pointer: Option::None,
+            },
+        )
+    }
+}
 
 pub fn parse(tokens: Vec<Vec<Token>>, source: String) -> Vec<Node> {
     let temp_lines: Vec<&str> = source.split("\n").collect();
@@ -331,25 +414,29 @@ pub fn parse(tokens: Vec<Vec<Token>>, source: String) -> Vec<Node> {
         if line.is_empty() {
             continue;
         }
-        let mut ref_line: Vec<&Token> = vec![];
 
-        for token in line {
-            ref_line.push(&token)
-        }
+        let base_context: &BaseContext = &BaseContext {
+            tokens: (*line).clone(),
+            base: idx,
+            source: lines.clone(),
+        };
 
-        let node = parse_expression(
-            ref_line,
-            &BaseContext {
-                tokens: (*line).clone(),
-                base: idx,
-                source: lines.clone(),
+        match &line[0].value {
+            Value::Keyword(keyword) => match keyword.as_str() {
+                "let" => nodes.push(parse_assignment(line, base_context)),
+                _ => {}
             },
-        );
-
-        nodes.push(node)
+            Value::Str(_)
+            | Value::Int(_)
+            | Value::Float(_)
+            | Value::FormattedStr(_)
+            | Value::Identifier(_) => nodes.push(parse_expression(
+                line.iter().collect::<Vec<&Token>>(),
+                base_context,
+            )),
+            _ => {}
+        }
     }
 
     return nodes;
 }
-
-//pub fn compile(tokens: Vec<Token>) -> Vec<u8> { }
