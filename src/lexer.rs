@@ -18,6 +18,10 @@ pub enum Value {
     LSquare,
     RSquare,
 
+    True,
+    False,
+    None,
+
     Operator(String),
 }
 
@@ -42,7 +46,7 @@ fn grab<F: Fn(char) -> bool>(source: &String, i: usize, check: F) -> (String, us
         }
     }
 
-    return (captured, idx);
+    (captured, idx)
 }
 
 pub fn construct(value: Value, line: usize) -> Token {
@@ -177,7 +181,12 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
                             )
                         }
                     } else {
-                        line_tokens.push(construct(Value::Identifier(identifier), line_idx))
+                        match identifier.as_str() {
+                            "true" => line_tokens.push(construct(Value::True, line_idx)),
+                            "false" => line_tokens.push(construct(Value::False, line_idx)),
+                            "none" => line_tokens.push(construct(Value::None, line_idx)),
+                            _ => line_tokens.push(construct(Value::Identifier(identifier), line_idx))
+                        }
                     }
                 }
             }
@@ -230,5 +239,5 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
         }
     }
 
-    return tokens;
+    tokens
 }
