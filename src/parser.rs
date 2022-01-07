@@ -1,10 +1,10 @@
-use crate::error::{raise, BaseContext, Context};
+use crate::error::{raise, raise_internal, BaseContext, Context};
 use crate::lexer::{Token, Value};
 
 use std::mem::discriminant;
 use std::process::exit;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Node {
     Unary(Value),
     FunctionCall(FunctionCall),
@@ -13,23 +13,24 @@ pub enum Node {
     Assignment(VariableAssignment),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BinaryNode {
-    a: Node,
-    b: Node,
-    o: String,
+    pub a: Node,
+    pub b: Node,
+    pub o: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FunctionCall {
-    name: String,
-    args: Vec<Node>,
+    pub name: String,
+    pub args: Vec<Node>,
+    pub ismacro: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct VariableAssignment {
-    name: String,
-    value: Box<Node>,
+    pub name: String,
+    pub value: Box<Node>,
 }
 
 pub fn has_operators(tokens: &Vec<&Token>, operators: Vec<&str>) -> bool {
@@ -102,11 +103,15 @@ fn parse_list(tokens: &Vec<&Token>, context: &BaseContext) -> Vec<Node> {
     return ret;
 }
 
-fn parse_function_call(tokens: &Vec<&Token>, context: &BaseContext) -> Node {
+fn parse_function_call(tokens: &Vec<&Token>, context: &BaseContext, ismacro: bool) -> Node {
     let mut function_name = String::from("NaN");
 
     if let Value::Identifier(identifier) = &tokens[0].value {
         function_name = identifier.to_string();
+    } else if let Value::MacroIdentifier(identifier) = &tokens[0].value {
+        function_name = identifier.to_string();
+    } else {
+        raise_internal("0004");
     }
 
     if tokens[1].value == Value::LParen {
@@ -116,6 +121,7 @@ fn parse_function_call(tokens: &Vec<&Token>, context: &BaseContext) -> Node {
                     return Node::FunctionCall(FunctionCall {
                         name: function_name,
                         args: vec![],
+                        ismacro,
                     })
                 }
                 _ => {
@@ -124,6 +130,7 @@ fn parse_function_call(tokens: &Vec<&Token>, context: &BaseContext) -> Node {
                     return Node::FunctionCall(FunctionCall {
                         name: function_name,
                         args: arguments,
+                        ismacro,
                     });
                 }
             },
@@ -173,8 +180,19 @@ fn parse_value(tokens: &Vec<&Token>, context: &BaseContext) -> Node {
                 }
             }
 
-            Value::Identifier(_) => match tokens.len() {
-                1 => return Node::Unary(tokens[0].clone().value),
+            Value::Identifier(_) | Value::MacroIdentifier(_) => match tokens.len() {
+                1 => match tokens[0].value {
+                    Value::Identifier(_) => return Node::Unary(tokens[0].clone().value),
+                    Value::MacroIdentifier(_) => raise(
+                        "Expected macro call.",
+                        Context {
+                            idx: tokens[0].line,
+                            line: context.source[tokens[0].line].clone(),
+                            pointer: Option::None,
+                        },
+                    ),
+                    _ => raise_internal("0003"),
+                },
                 2 => {
                     let message: &str;
 
@@ -195,7 +213,14 @@ fn parse_value(tokens: &Vec<&Token>, context: &BaseContext) -> Node {
                         },
                     );
                 }
-                _ => return parse_function_call(tokens, context),
+                _ => {
+                    return parse_function_call(
+                        tokens,
+                        context,
+                        discriminant(&tokens[0].value)
+                            == discriminant(&Value::MacroIdentifier("".to_string())),
+                    )
+                }
             },
             Value::LSquare => match tokens[tokens.len() - 1].value {
                 Value::RSquare => {
@@ -287,7 +312,6 @@ pub fn parse_expression(tokens: Vec<&Token>, context: &BaseContext) -> Node {
         }
 
         let right_tokens = tokens[left_tokens.len() + 1..tokens.len()].to_vec();
-        let left_tokens_len = left_tokens.len();
 
         let right_node: Node;
         let left_node: Node;
@@ -430,7 +454,8 @@ pub fn parse(tokens: Vec<Vec<Token>>, source: String) -> Vec<Node> {
             | Value::Int(_)
             | Value::Float(_)
             | Value::FormattedStr(_)
-            | Value::Identifier(_) => nodes.push(parse_expression(
+            | Value::Identifier(_)
+            | Value::LSquare => nodes.push(parse_expression(
                 line.iter().collect::<Vec<&Token>>(),
                 base_context,
             )),
