@@ -9,6 +9,7 @@ pub enum Value {
     Int(i64),
     Float(f64),
     Identifier(String),
+    MacroIdentifier(String),
 
     LParen,
     RParen,
@@ -53,7 +54,7 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
     let mut line_tokens: &mut Vec<Token> = tokens.last_mut().unwrap();
     let mut line_idx: usize = 0;
 
-    let identifiers: Vec<&str> = vec!["let"];
+    let keywords: Vec<&str> = vec!["let"];
 
     source.push(' ');
     let lines: Vec<&str> = source.split("\n").collect();
@@ -130,6 +131,7 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
         else if "\"'`".contains(ch) {
             let (string, i) = grab(&source, i, move |de| de != ch);
 
+            // skip the amount of characters that were grabbed
             for _ in 0..i + 1 {
                 source_iter.next();
             }
@@ -142,23 +144,49 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
             }
         }
         // handle identifiers
-        else if ch.is_ascii_alphabetic() || ch == '_' {
-            let (identifier, i) =
-                grab(&source, i - 1, |fr| fr.is_ascii_alphanumeric() || fr == '_');
+        else if ch.is_ascii_alphabetic() || "_!".contains(ch) {
+            let (identifier, i) = grab(&source, i - 1, |fr| {
+                fr.is_ascii_alphanumeric() || "_!".contains(fr)
+            });
 
+            // skip the amount of characters that were grabbed
             for _ in 0..i - 1 {
                 source_iter.next();
             }
 
-            match identifiers.contains(&identifier.as_str()) {
+            match keywords.contains(&identifier.as_str()) {
                 true => line_tokens.push(construct(Value::Keyword(identifier), line_idx)),
-                false => line_tokens.push(construct(Value::Identifier(identifier), line_idx)),
+                false => {
+                    if identifier.contains('!') {
+                        if identifier.chars().filter(|&n| n == '!').count() == 1
+                            && identifier.ends_with('!')
+                        {
+                            line_tokens
+                                .push(construct(Value::MacroIdentifier(identifier), line_idx))
+                        } else {
+                            raise(
+                                "Unexpected token '!'",
+                                Context {
+                                    line: line.to_string(),
+                                    idx: line_idx,
+                                    pointer: Option::Some(
+                                        i + (identifier.len()
+                                            - identifier.match_indices("!").nth(1).unwrap().0),
+                                    ),
+                                },
+                            )
+                        }
+                    } else {
+                        line_tokens.push(construct(Value::Identifier(identifier), line_idx))
+                    }
+                }
             }
         }
         // handle integers and floats
         else if "1234567890.".contains(ch) {
             let (int, r) = grab(&source, i - 1, |cu| "1234567890.".contains(cu));
 
+            // skip the amount of characters that were grabbed
             for _ in 0..r - 1 {
                 source_iter.next();
             }
