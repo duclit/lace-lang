@@ -1,39 +1,61 @@
 mod compiler;
 mod error;
+mod io;
 mod lexer;
+mod opcode;
+mod parser;
 
 use std::fs;
 use std::{env, process::exit};
 
-use crate::compiler::parse;
-use crate::lexer::{tokenize, Token};
+use crate::io as lace_io;
+
+fn error(msg: &str) -> ! {
+    println!("{}", msg);
+    exit(0)
+}
+
+fn is_of_ext(ext: &str, path: &String) -> bool {
+    path.ends_with(ext)
+}
+
+fn compile(path: &String) {
+    let data = fs::read_to_string(path);
+    let filename = std::path::Path::new(path).file_name().unwrap().to_os_string().into_string().unwrap();
+
+    match data {
+        Result::Ok(data) => {
+            if !is_of_ext(".lc", &filename) { error("Lace files must end with .lc") }
+
+            let tokens = lexer::tokenize(data.clone());
+            let code = compiler::compile(parser::parse(tokens, data));
+
+            let object_file_name = format!("{}.o", &filename[0..filename.len() - 3]);
+
+            fs::write(object_file_name, lace_io::serialize(code.clone())).unwrap();
+
+            println!(
+                "Instructions: {:#?}\nConstants: {:#?}",
+                code.code, code.constants
+            )
+        }
+        Result::Err(err) => {
+            println!("😐 Unable to read file");
+            exit(0);
+        }
+    }
+}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    match args.len() {
-        0 | 1 => {
-            println!("No path provided. Nothing to do 😴");
-            exit(0)
-        }
-        2 => {
-            let path = &args[1];
-            let data = fs::read_to_string(path);
+    if args.len() <= 2 {
+        error("🤔 Expected argument.")
+    }
 
-            match data {
-                Result::Ok(data) => {
-                    let tokens = tokenize(data.clone());
-
-                    println!("{:#?}", parse(tokens, data))
-                }
-                Result::Err(_) => {
-                    println!("😐 Unable to read file");
-                    exit(0);
-                }
-            }
-        }
-        _ => {
-            println!("🔍 Expected only one argument (A file path).");
-        }
+    match args[1].as_str() {
+        "build" => compile(&args[2]),
+        "run" => {}
+        _ => error(format!("🔎 Command '{}' not found.", args[1]).as_str())
     }
 }
