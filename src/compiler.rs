@@ -31,18 +31,31 @@ fn get_operator_opcode(op: &String) -> Code {
 pub fn compile_expression(tree: &Node, code: &mut CodeObject) {
     match tree {
         Node::Unary(value) => {
-            let index: usize = code.add_constant(to_literal(value));
-
             match value {
-                lexer::Value::Identifier(_) => code.add_code(Code::OpCode(OpCode::LoadVariable)),
-                _ => code.add_code(Code::OpCode(OpCode::LoadConst)),
-            }
+                lexer::Value::False | lexer::Value::True | lexer::Value::None => {
+                    code.add_code(Code::OpCode(OpCode::LoadBuiltinValue));
+                    
+                    match value {
+                        lexer::Value::None => code.add_code(Code::Number(0)),
+                        lexer::Value::True => code.add_code(Code::Number(1)),
+                        lexer::Value::False => code.add_code(Code::Number(2)),
+                        _ => {}
+                    }
+                }
+                _ => {
+                    let index: usize = code.add_constant(to_literal(value));
 
-            code.add_code(Code::Number(index));
+                    match value {
+                        lexer::Value::Identifier(_) => code.add_code(Code::OpCode(OpCode::LoadVariable)),
+                        _ => code.add_code(Code::OpCode(OpCode::LoadConst)),
+                    }
 
-            match value {
-                lexer::Value::FormattedStr(_) => code.add_code(Code::OpCode(OpCode::FormatString)),
-                _ => {}
+                    code.add_code(Code::Number(index));
+
+                    if let lexer::Value::FormattedStr(_) = value {
+                        code.add_code(Code::OpCode(OpCode::FormatString))
+                    }
+                }
             }
         }
         Node::Binary(binary) => {
