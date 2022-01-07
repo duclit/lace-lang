@@ -1,11 +1,14 @@
 use serde::{Deserialize, Serialize};
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub enum OpCode {
     LoadConst,
     LoadVariable,
     AssignVar,
+
+    // followed by number ranging from 0-2 (none, true & false)
+    LoadBuiltinValue,
 
     FormatString,
     BuildList,
@@ -20,7 +23,7 @@ pub enum OpCode {
     RShift,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub enum Code {
     OpCode(OpCode),
     Number(usize),
@@ -33,7 +36,7 @@ pub enum Value {
     Float(f64),
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct CodeObject {
     pub code: Vec<Code>,
     pub constants: Vec<Value>,
