@@ -58,7 +58,7 @@ pub fn has_operators(tokens: &Vec<&Token>, operators: Vec<&str>) -> bool {
 }
 
 fn parse_function_arguments(tokens: &Vec<&Token>, context: &BaseContext) -> Vec<Node> {
-    return parse_list(tokens, context);
+    parse_list(tokens, context)
 }
 
 fn parse_list(tokens: &Vec<&Token>, context: &BaseContext) -> Vec<Node> {
@@ -71,13 +71,13 @@ fn parse_list(tokens: &Vec<&Token>, context: &BaseContext) -> Vec<Node> {
                 bracket_stack.push(*token);
 
                 let arg_len = elements.len() - 1;
-                elements[arg_len].push(*token);
+                elements[arg_len].push(*token)
             }
             Value::RParen | Value::RCurly | Value::RSquare => {
                 bracket_stack.pop();
 
                 let arg_len = elements.len() - 1;
-                elements[arg_len].push(*token);
+                elements[arg_len].push(*token)
             }
             Value::Operator(op) => {
                 if op == "," && bracket_stack.is_empty() {
@@ -89,7 +89,7 @@ fn parse_list(tokens: &Vec<&Token>, context: &BaseContext) -> Vec<Node> {
             }
             _ => {
                 let arg_len = elements.len() - 1;
-                elements[arg_len].push(*token);
+                elements[arg_len].push(*token)
             }
         }
     }
@@ -97,10 +97,10 @@ fn parse_list(tokens: &Vec<&Token>, context: &BaseContext) -> Vec<Node> {
     let mut ret: Vec<Node> = vec![];
 
     for element in elements {
-        ret.push(parse_expression(element, context));
+        ret.push(parse_expression(element, context))
     }
 
-    return ret;
+    ret
 }
 
 fn parse_function_call(tokens: &Vec<&Token>, context: &BaseContext, ismacro: bool) -> Node {
@@ -117,21 +117,19 @@ fn parse_function_call(tokens: &Vec<&Token>, context: &BaseContext, ismacro: boo
     if tokens[1].value == Value::LParen {
         match tokens[tokens.len() - 1].value {
             Value::RParen => match tokens.len() {
-                3 => {
-                    return Node::FunctionCall(FunctionCall {
-                        name: function_name,
-                        args: vec![],
-                        ismacro,
-                    })
-                }
+                3 => Node::FunctionCall(FunctionCall {
+                    name: function_name,
+                    args: vec![],
+                    ismacro,
+                }),
                 _ => {
                     let arguments =
                         parse_function_arguments(&tokens[2..tokens.len() - 1].to_vec(), context);
-                    return Node::FunctionCall(FunctionCall {
+                    Node::FunctionCall(FunctionCall {
                         name: function_name,
                         args: arguments,
                         ismacro,
-                    });
+                    })
                 }
             },
             _ => raise(
@@ -151,7 +149,7 @@ fn parse_function_call(tokens: &Vec<&Token>, context: &BaseContext, ismacro: boo
                 line: context.source[tokens[1].line].clone(),
                 pointer: Option::None,
             },
-        );
+        )
     }
 }
 
@@ -168,7 +166,7 @@ fn parse_value(tokens: &Vec<&Token>, context: &BaseContext) -> Node {
         _ => match tokens[0].value {
             Value::Str(_) | Value::Int(_) | Value::Float(_) | Value::FormattedStr(_) => {
                 match tokens.len() {
-                    1 => return Node::Unary(tokens[0].clone().value),
+                    1 => Node::Unary(tokens[0].clone().value),
                     _ => raise(
                         "Expected only one value. Perhaps you forgot a comma?",
                         Context {
@@ -178,11 +176,23 @@ fn parse_value(tokens: &Vec<&Token>, context: &BaseContext) -> Node {
                         },
                     ),
                 }
+            } 
+
+            Value::True | Value::False | Value::None => match tokens.len() {
+                1 => Node::Unary(tokens[0].clone().value),
+                _ => raise(
+                    "Expected only one value. Perhaps you forgot a comma?",
+                    Context {
+                        idx: tokens[1].line,
+                        line: context.source[tokens[1].line].clone(),
+                        pointer: Option::None,
+                    },
+                ),
             }
 
             Value::Identifier(_) | Value::MacroIdentifier(_) => match tokens.len() {
                 1 => match tokens[0].value {
-                    Value::Identifier(_) => return Node::Unary(tokens[0].clone().value),
+                    Value::Identifier(_) => Node::Unary(tokens[0].clone().value),
                     Value::MacroIdentifier(_) => raise(
                         "Expected macro call.",
                         Context {
@@ -213,20 +223,18 @@ fn parse_value(tokens: &Vec<&Token>, context: &BaseContext) -> Node {
                         },
                     );
                 }
-                _ => {
-                    return parse_function_call(
-                        tokens,
-                        context,
-                        discriminant(&tokens[0].value)
-                            == discriminant(&Value::MacroIdentifier("".to_string())),
-                    )
-                }
+                _ => parse_function_call(
+                    tokens,
+                    context,
+                    discriminant(&tokens[0].value)
+                        == discriminant(&Value::MacroIdentifier("".to_string())),
+                ),
             },
             Value::LSquare => match tokens[tokens.len() - 1].value {
                 Value::RSquare => {
                     let list: Vec<Node> =
                         parse_list(&tokens[1..tokens.len() - 1].to_vec(), context);
-                    return Node::List(list);
+                    Node::List(list)
                 }
                 _ => raise(
                     "Invalid syntax. Perhaps you forgot a comma?",
@@ -276,11 +284,11 @@ fn parse_mul_div(tokens: Vec<&Token>, context: &BaseContext) -> Node {
         }
     }
 
-    return Node::Binary(Box::new(BinaryNode {
+    Node::Binary(Box::new(BinaryNode {
         a: lnode,
         b: rnode,
         o: operator,
-    }));
+    }))
 }
 
 pub fn parse_expression(tokens: Vec<&Token>, context: &BaseContext) -> Node {
@@ -332,15 +340,15 @@ pub fn parse_expression(tokens: Vec<&Token>, context: &BaseContext) -> Node {
             }
         }
 
-        return Node::Binary(Box::new(BinaryNode {
+        Node::Binary(Box::new(BinaryNode {
             a: left_node,
             b: right_node,
             o: operator,
-        }));
+        }))
     } else if has_operators(&tokens, vec!["*", "/", "%", "^", "<<", ">>"]) {
-        return parse_mul_div(tokens, context);
+        parse_mul_div(tokens, context)
     } else {
-        return parse_value(&tokens, context);
+        parse_value(&tokens, context)
     }
 }
 
@@ -364,7 +372,7 @@ fn expect(
     if (!exact && discriminant(&token.value) == discriminant(&value))
         || (exact && token.value == value)
     {
-        return Result::Ok(());
+        Result::Ok(())
     } else {
         return Result::Err(Context {
             idx: token.line,
@@ -405,10 +413,10 @@ pub fn parse_assignment(tokens: &Vec<Token>, base_context: &BaseContext) -> Node
             let value =
                 parse_expression(tokens.iter().skip(3).collect::<Vec<&Token>>(), base_context);
 
-            return Node::Assignment(VariableAssignment {
+            Node::Assignment(VariableAssignment {
                 name: (*identifier).clone(),
                 value: Box::new(value),
-            });
+            })
         } else {
             exit(0) // this will literally never happen
         }
@@ -463,5 +471,5 @@ pub fn parse(tokens: Vec<Vec<Token>>, source: String) -> Vec<Node> {
         }
     }
 
-    return nodes;
+    nodes
 }
