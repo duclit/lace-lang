@@ -30,3 +30,9 @@ pub fn raise(err: &str, ctx: Context) -> ! {
     println!("Error: {}", err);
     exit(0);
 }
+
+// raised when something goes wrong unexpectedly in the pipeline
+pub fn raise_internal(code: &str) -> ! {
+    println!("An unexpected error has occured (#{})", code);
+    exit(0);
+}
