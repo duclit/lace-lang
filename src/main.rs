@@ -2,8 +2,8 @@ mod compiler;
 mod error;
 mod io;
 mod lexer;
-mod opcode;
 mod parser;
+mod vm;
 
 use std::fs;
 use std::{env, process::exit};
@@ -21,11 +21,18 @@ fn is_of_ext(ext: &str, path: &String) -> bool {
 
 fn compile(path: &String) {
     let data = fs::read_to_string(path);
-    let filename = std::path::Path::new(path).file_name().unwrap().to_os_string().into_string().unwrap();
+    let filename = std::path::Path::new(path)
+        .file_name()
+        .unwrap()
+        .to_os_string()
+        .into_string()
+        .unwrap();
 
     match data {
         Result::Ok(data) => {
-            if !is_of_ext(".lc", &filename) { error("Lace files must end with .lc") }
+            if !is_of_ext(".lc", &filename) {
+                error("Lace files must end with .lc")
+            }
 
             let tokens = lexer::tokenize(data.clone());
             let code = compiler::compile(parser::parse(tokens, data));
@@ -39,7 +46,7 @@ fn compile(path: &String) {
                 code.code, code.constants
             )
         }
-        Result::Err(err) => {
+        Result::Err(_) => {
             println!("😐 Unable to read file");
             exit(0);
         }
@@ -56,6 +63,6 @@ fn main() {
     match args[1].as_str() {
         "build" => compile(&args[2]),
         "run" => {}
-        _ => error(format!("🔎 Command '{}' not found.", args[1]).as_str())
+        _ => error(format!("🔎 Command '{}' not found.", args[1]).as_str()),
     }
 }
