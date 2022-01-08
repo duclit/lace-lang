@@ -440,8 +440,57 @@ fn parse_assignment(tokens: &Vec<Token>, base_context: &BaseContext) -> Node {
     }
 }
 
-fn parse_function_parameters(tokens: &Vec<Token>) -> Vec<String> {
-    return vec!["".to_string()];
+fn parse_function_parameters(tokens: &Vec<Token>, base_context: &BaseContext) -> Vec<String> {
+    let mut arguments: Vec<String> = vec![];
+    let mut current_arguments: Vec<String> = vec![];
+
+    for token in tokens {
+        match &token.value {
+            Value::Identifier(identifier) => current_arguments.push(identifier.to_string()),
+            Value::Operator(op) => match op.as_str() {
+                "," => match current_arguments.len() {
+                    0 => raise(
+                        "Expected identifier.",
+                        Context {
+                            idx: tokens[1].line,
+                            line: base_context.source[tokens[1].line].clone(),
+                            pointer: Option::None,
+                        },
+                    ),
+                    1 => {
+                        arguments.push(current_arguments[0].clone());
+                        current_arguments = vec![];
+                    }
+                    _ => raise(
+                        "Expected only one identifier.",
+                        Context {
+                            idx: tokens[2].line,
+                            line: base_context.source[tokens[2].line].clone(),
+                            pointer: Option::None,
+                        },
+                    ),
+                },
+                _ => raise(
+                    "Expected identifier or comma.",
+                    Context {
+                        idx: token.line,
+                        line: base_context.source[tokens[2].line].clone(),
+                        pointer: Option::None,
+                    },
+                ),
+            },
+            _ => raise(
+                "Expected identifier or comma.",
+                Context {
+                    idx: token.line,
+                    line: base_context.source[tokens[2].line].clone(),
+                    pointer: Option::None,
+                },
+            ),
+        }
+    }
+
+    return arguments;
 }
 
 fn parse_function(
@@ -465,32 +514,52 @@ fn parse_function(
         Err(context) => raise("Expected parameter list.", context),
     }
 
+    let mut parameters: Vec<String> = vec![];
+    let body: (Vec<Token>, usize);
+
+    //println!("{:?} {:?}", tokens, tokens[3]);
+
     match expect(tokens, 2, Value::RParen, base_context, true) {
-        Ok(_) => {}
-        Err(context) => raise("Expected closing parenthesis.", context),
-    }
+        Ok(_) => {
+            match expect(tokens, 4, Value::LCurly, base_context, true) {
+                Ok(_) => {},
+                Err(context) => raise("Expected opening curly braces", context)
+            }
 
-    match expect(tokens, 3, Value::LCurly, base_context, true) {
-        Ok(_) => {}
-        Err(context) => raise("Expected opening curly bracket.", context),
-    }
+            body = get_block(&tokens, 5, source.to_string());
+        }
+        Err(_context) => {
+            let mut argument_tokens: Vec<Token> = vec![];
 
-    let body = get_block(&tokens, 5, source.to_string());
+            for token in tokens.into_iter().skip(4).collect::<Vec<&Token>>() {
+                match token.value {
+                    Value::RParen => break,
+                    _ => argument_tokens.push(token.clone()),
+                }
+            }
+
+            parameters = parse_function_parameters(&argument_tokens, base_context);
+
+            match expect(tokens, 4 + parameters.len(), Value::LCurly, base_context, true) {
+                Ok(_) => {},
+                Err(context) => raise("Expected opening curly braces", context)
+            }
+
+            body = get_block(&tokens, 6 + parameters.len(), source.to_string());
+        }
+    }
 
     if let Value::Identifier(name) = &tokens[1].value {
         let mut function = Function {
             name: name.to_string(),
-            args: vec![],
+            args: parameters,
             body: vec![],
             local_functions: HashMap::new(),
         };
 
         parse(body.0, source.to_string(), &mut function);
-        
-        return (
-            function,
-            body.1 + 3,
-        );
+
+        return (function, body.1 + 3);
     } else {
         raise_internal("0005");
     }
@@ -498,7 +567,9 @@ fn parse_function(
 
 fn get_block(tokens: &Vec<Token>, start_i: usize, source: String) -> (Vec<Token>, usize) {
     let mut block: Vec<Token> = Vec::new();
-    let tokens = tokens.iter().skip(start_i);
+    let tokens: Vec<&Token> = tokens.iter().skip(start_i).collect();
+
+    println!("{:?}", tokens);
 
     let mut bracket_stack: Vec<Value> = Vec::new();
 
@@ -510,10 +581,9 @@ fn get_block(tokens: &Vec<Token>, start_i: usize, source: String) -> (Vec<Token>
             }
             Value::RCurly => {
                 if bracket_stack.is_empty() {
-                    bracket_stack.push(Value::RCurly);
                     break;
                 } else {
-                    bracket_stack.push(Value::RCurly);
+                    block.push(token.clone());
                     bracket_stack.pop();
                 }
             }
@@ -581,7 +651,9 @@ pub fn parse(tokens: Vec<Token>, source: String, chunk: &mut Function) {
                         tokens_iter.next();
                     }
 
-                    chunk.local_functions.insert((&function.name).to_string(), function);
+                    chunk
+                        .local_functions
+                        .insert((&function.name).to_string(), function);
                 }
                 _ => {}
             },
@@ -597,7 +669,7 @@ pub fn parse(tokens: Vec<Token>, source: String, chunk: &mut Function) {
             | Value::FormattedStr(_) => {
                 let line = get_line(&tokens, idx);
                 let line: Vec<&Token> = line.iter().collect();
-                
+
                 for _ in 0..line.len() {
                     tokens_iter.next();
                 }
@@ -614,6 +686,4 @@ pub fn parse(tokens: Vec<Token>, source: String, chunk: &mut Function) {
             _ => {}
         }
     }
-
-    println!("{:#?}", chunk.body);
 }
