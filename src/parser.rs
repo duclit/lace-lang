@@ -2,8 +2,6 @@ use crate::error::{raise, raise_internal, BaseContext, Context};
 use crate::lexer::{Token, Value};
 
 use std::mem::discriminant;
-use std::ops::RangeInclusive;
-use std::process::exit;
 
 #[derive(Debug, Clone)]
 pub enum Node {
