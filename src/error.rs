@@ -20,7 +20,7 @@ pub fn raise(err: &str, ctx: Context) -> ! {
     let empty = " ".repeat(format!("{}", line_idx).len());
 
     println!("{} |", empty);
-    println!("{} | {}", line_idx, ctx.line);
+    println!("{} | {}", line_idx, ctx.line.trim_start().to_string());
 
     match ctx.pointer {
         Option::None => println!("{} |", empty),
