@@ -567,8 +567,6 @@ pub fn parse(tokens: Vec<Token>, source: String) -> Vec<Node> {
                     ));
                 }
                 "fn" => {
-
-
                     let (node, skip) = parse_function(
                         &tokens[idx..tokens.len()].to_vec(),
                         &BaseContext {
@@ -587,6 +585,32 @@ pub fn parse(tokens: Vec<Token>, source: String) -> Vec<Node> {
                 }
                 _ => {}
             },
+            Value::LSquare
+            | Value::Identifier(_)
+            | Value::MacroIdentifier(_)
+            | Value::True
+            | Value::False
+            | Value::None
+            | Value::Str(_)
+            | Value::Int(_)
+            | Value::Float(_)
+            | Value::FormattedStr(_) => {
+                let line = get_line(&tokens, idx);
+                let line: Vec<&Token> = line.iter().collect();
+                
+                for _ in 0..line.len() {
+                    tokens_iter.next();
+                }
+
+                nodes.push(parse_expression(
+                    line,
+                    &BaseContext {
+                        base: token.line,
+                        source: lines.clone(),
+                        tokens: tokens.clone(),
+                    },
+                ))
+            }
             _ => {}
         }
     }
