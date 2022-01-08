@@ -22,6 +22,12 @@ pub enum OpCode {
     Pow,
     LShift,
     RShift,
+    Equal,
+    NotEqual,
+    More,
+    Less,
+    MoreOrEqual,
+    LessOrEqual
 }
 
 pub trait Extract<T> {
@@ -61,7 +67,20 @@ pub enum Value {
     Float(f64),
     List(Vec<Value>),
     Bool(bool),
-    None
+    None,
+}
+
+impl Value {
+    fn is_truthy(&self) -> bool {
+        match self {
+            Value::String(str) => str.is_empty(),
+            Value::Integer(int) => int < &1,
+            Value::Float(float) => float < &1.0,
+            Value::List(vec) => vec.is_empty(),
+            Value::Bool(bool) => *bool,
+            Value::None => false
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
