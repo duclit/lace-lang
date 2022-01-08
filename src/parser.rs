@@ -360,6 +360,57 @@ fn parse_expression(tokens: Vec<&Token>, context: &BaseContext) -> Node {
     }
 }
 
+fn parse_equation(tokens: Vec<&Token>, context: &BaseContext) -> Node {
+    if has_operators(&tokens, vec!["==", "!=", ">", "<", ">=", "<="]) {
+        let mut left_tokens: Vec<&Token> = vec![];
+        let mut bracket_stack: Vec<&Token> = vec![];
+
+        let mut operator: String = " ".to_string();
+
+        for (_idx, token) in (&tokens).into_iter().enumerate() {
+            if let Value::Operator(ref op) = token.value {
+                if (vec!["==", "!=", ">", "<", ">=", "<="].contains(&op.as_str())) && bracket_stack.is_empty() {
+                    operator = op.to_string();
+                    break;
+                } else {
+                    left_tokens.push(token);
+                }
+            } else {
+                match &token.value {
+                    Value::LCurly | Value::LParen | Value::LSquare => bracket_stack.push(*token),
+                    Value::RCurly | Value::RParen | Value::RSquare => {
+                        bracket_stack.pop();
+                    }
+                    _ => {}
+                }
+
+                left_tokens.push(token);
+            }
+        }
+
+        let right_node: Node;
+        let left_node: Node;
+
+        let right_tokens = tokens[left_tokens.len() + 1..tokens.len()].to_vec();
+        
+        if has_operators(&left_tokens, vec!["==", "!=", ">", "<", ">=", "<="]) {
+            left_node = parse_equation(left_tokens, context);
+        } else {
+            left_node = parse_expression(left_tokens, context);
+        }
+
+        right_node = parse_expression(right_tokens, context);
+
+        Node::Binary(Box::new(BinaryNode {
+            a: left_node,
+            b: right_node,
+            o: operator
+        }))
+    } else {
+        parse_expression(tokens, context)
+    }
+}
+
 fn expect(
     tokens: &Vec<Token>,
     idx: usize,
@@ -419,7 +470,7 @@ fn parse_assignment(tokens: &Vec<Token>, base_context: &BaseContext) -> Node {
     if tokens.len() >= 4 {
         if let Value::Identifier(identifier) = &tokens[1].value {
             let value =
-                parse_expression(tokens.iter().skip(3).collect::<Vec<&Token>>(), base_context);
+                parse_equation(tokens.iter().skip(3).collect::<Vec<&Token>>(), base_context);
 
             Node::Assignment(VariableAssignment {
                 name: (*identifier).clone(),
@@ -565,7 +616,7 @@ fn parse_function(
     }
 }
 
-fn get_block(tokens: &Vec<Token>, start_i: usize, source: String) -> (Vec<Token>, usize) {
+fn get_block(tokens: &Vec<Token>, start_i: usize, _source: String) -> (Vec<Token>, usize) {
     let mut block: Vec<Token> = Vec::new();
     let tokens: Vec<&Token> = tokens.iter().skip(start_i).collect();
 
@@ -674,7 +725,7 @@ pub fn parse(tokens: Vec<Token>, source: String, chunk: &mut Function) {
                     tokens_iter.next();
                 }
 
-                chunk.body.push(parse_expression(
+                chunk.body.push(parse_equation(
                     line,
                     &BaseContext {
                         base: token.line,
