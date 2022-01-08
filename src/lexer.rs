@@ -18,6 +18,8 @@ pub enum Value {
     LSquare,
     RSquare,
 
+    Semicolon,
+
     True,
     False,
     None,
@@ -53,12 +55,11 @@ pub fn construct(value: Value, line: usize) -> Token {
     Token { value, line }
 }
 
-pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
-    let mut tokens: Vec<Vec<Token>> = vec![vec![]];
-    let mut line_tokens: &mut Vec<Token> = tokens.last_mut().unwrap();
+pub fn tokenize(mut source: String) -> Vec<Token> {
+    let mut tokens: Vec<Token> = vec![];
     let mut line_idx: usize = 0;
 
-    let keywords: Vec<&str> = vec!["let"];
+    let keywords: Vec<&str> = vec!["let", "fn"];
 
     source.push(' ');
     let lines: Vec<&str> = source.split("\n").collect();
@@ -69,16 +70,15 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
         if ch == '\n' {
             line_idx += 1;
         } else if ch == ';' {
-            tokens.push(Vec::new());
-            line_tokens = tokens.last_mut().unwrap();
+            tokens.push(construct(Value::Semicolon, line_idx));
         } else if "()[]{}".contains(ch) {
             match ch {
-                '(' => line_tokens.push(construct(Value::LParen, line_idx)),
-                ')' => line_tokens.push(construct(Value::RParen, line_idx)),
-                '[' => line_tokens.push(construct(Value::LSquare, line_idx)),
-                ']' => line_tokens.push(construct(Value::RSquare, line_idx)),
-                '{' => line_tokens.push(construct(Value::LCurly, line_idx)),
-                '}' => line_tokens.push(construct(Value::RCurly, line_idx)),
+                '(' => tokens.push(construct(Value::LParen, line_idx)),
+                ')' => tokens.push(construct(Value::RParen, line_idx)),
+                '[' => tokens.push(construct(Value::LSquare, line_idx)),
+                ']' => tokens.push(construct(Value::RSquare, line_idx)),
+                '{' => tokens.push(construct(Value::LCurly, line_idx)),
+                '}' => tokens.push(construct(Value::RCurly, line_idx)),
                 _ => {}
             }
         }
@@ -89,13 +89,13 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
             match following {
                 Option::Some(op) => {
                     if op == '=' {
-                        line_tokens.push(construct(Value::Operator(format!("{}=", ch)), line_idx));
+                        tokens.push(construct(Value::Operator(format!("{}=", ch)), line_idx));
                         source_iter.next();
                     } else if op == '>' && ch == '-' {
-                        line_tokens.push(construct(Value::Operator(format!("->")), line_idx));
+                        tokens.push(construct(Value::Operator(format!("->")), line_idx));
                         source_iter.next();
                     } else if "<>".contains(op) && op == ch {
-                        line_tokens.push(construct(
+                        tokens.push(construct(
                             Value::Operator(format!("{}{}", op, ch)),
                             line_idx,
                         ));
@@ -116,9 +116,9 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
                             }
                         }
                     } else if ch == ',' {
-                        line_tokens.push(construct(Value::Operator(String::from(",")), line_idx));
+                        tokens.push(construct(Value::Operator(String::from(",")), line_idx));
                     } else {
-                        line_tokens.push(construct(Value::Operator(String::from(ch)), line_idx));
+                        tokens.push(construct(Value::Operator(String::from(ch)), line_idx));
                     }
                 }
                 Option::None => raise(
@@ -141,9 +141,9 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
             }
 
             match ch {
-                '\'' => line_tokens.push(construct(Value::Str(string), line_idx)),
-                '"' => line_tokens.push(construct(Value::Str(string), line_idx)),
-                '`' => line_tokens.push(construct(Value::FormattedStr(string), line_idx)),
+                '\'' => tokens.push(construct(Value::Str(string), line_idx)),
+                '"' => tokens.push(construct(Value::Str(string), line_idx)),
+                '`' => tokens.push(construct(Value::FormattedStr(string), line_idx)),
                 _ => {}
             }
         }
@@ -159,14 +159,13 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
             }
 
             match keywords.contains(&identifier.as_str()) {
-                true => line_tokens.push(construct(Value::Keyword(identifier), line_idx)),
+                true => tokens.push(construct(Value::Keyword(identifier), line_idx)),
                 false => {
                     if identifier.contains('!') {
                         if identifier.chars().filter(|&n| n == '!').count() == 1
                             && identifier.ends_with('!')
                         {
-                            line_tokens
-                                .push(construct(Value::MacroIdentifier(identifier), line_idx))
+                            tokens.push(construct(Value::MacroIdentifier(identifier), line_idx))
                         } else {
                             raise(
                                 "Unexpected token '!'",
@@ -182,10 +181,10 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
                         }
                     } else {
                         match identifier.as_str() {
-                            "true" => line_tokens.push(construct(Value::True, line_idx)),
-                            "false" => line_tokens.push(construct(Value::False, line_idx)),
-                            "none" => line_tokens.push(construct(Value::None, line_idx)),
-                            _ => line_tokens.push(construct(Value::Identifier(identifier), line_idx))
+                            "true" => tokens.push(construct(Value::True, line_idx)),
+                            "false" => tokens.push(construct(Value::False, line_idx)),
+                            "none" => tokens.push(construct(Value::None, line_idx)),
+                            _ => tokens.push(construct(Value::Identifier(identifier), line_idx)),
                         }
                     }
                 }
@@ -204,7 +203,7 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
 
             match count {
                 0 => match int.parse::<i64>() {
-                    Result::Ok(int) => line_tokens.push(construct(Value::Int(int), line_idx)),
+                    Result::Ok(int) => tokens.push(construct(Value::Int(int), line_idx)),
                     Result::Err(_) => raise(
                         "Integer literal is too large.",
                         Context {
@@ -215,7 +214,7 @@ pub fn tokenize(mut source: String) -> Vec<Vec<Token>> {
                     ),
                 },
                 1 => match int.parse::<f64>() {
-                    Result::Ok(float) => line_tokens.push(construct(Value::Float(float), line_idx)),
+                    Result::Ok(float) => tokens.push(construct(Value::Float(float), line_idx)),
                     Result::Err(_) => raise(
                         "Float literal is too large.",
                         Context {
