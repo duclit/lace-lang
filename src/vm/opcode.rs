@@ -60,9 +60,11 @@ pub enum Value {
     Integer(i64),
     Float(f64),
     List(Vec<Value>),
+    Bool(bool),
+    None
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CodeObject {
     pub code: Vec<Code>,
     pub constants: Vec<Value>,
