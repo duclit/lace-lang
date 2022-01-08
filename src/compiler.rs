@@ -1,6 +1,6 @@
 use crate::error::raise_internal;
 use crate::lexer;
-use crate::parser::Node;
+use crate::parser::{Node, Function};
 use crate::vm::opcode::{Code, CodeObject, OpCode, Value};
 
 fn to_literal(value: &lexer::Value) -> Value {
@@ -87,13 +87,13 @@ pub fn compile_expression(tree: &Node, code: &mut CodeObject) {
     }
 }
 
-pub fn compile(ast: Vec<Node>) -> CodeObject {
+pub fn compile(main: Function) -> CodeObject {
     let mut code = CodeObject {
         code: vec![],
         constants: vec![],
     };
 
-    for node in ast {
+    for node in main.body {
         match node {
             Node::Assignment(assignment) => {
                 compile_expression(&assignment.value, &mut code);
