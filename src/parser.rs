@@ -1,6 +1,7 @@
 use crate::error::{raise, raise_internal, BaseContext, Context};
 use crate::lexer::{Token, Value};
 
+use std::collections::HashMap;
 use std::mem::discriminant;
 
 #[derive(Debug, Clone)]
@@ -10,7 +11,6 @@ pub enum Node {
     List(Vec<Node>),
     Binary(Box<BinaryNode>),
     Assignment(VariableAssignment),
-    Function(Function),
 }
 
 #[derive(Debug, Clone)]
@@ -32,7 +32,7 @@ pub struct Function {
     pub name: String,
     pub args: Vec<String>,
     pub body: Vec<Node>,
-    pub lfunctions: Vec<Node>,
+    pub local_functions: HashMap<String, Function>,
 }
 
 #[derive(Debug, Clone)]
@@ -448,7 +448,7 @@ fn parse_function(
     tokens: &Vec<Token>,
     base_context: &BaseContext,
     source: String,
-) -> (Node, usize) {
+) -> (Function, usize) {
     match expect(
         tokens,
         0,
@@ -475,16 +475,20 @@ fn parse_function(
         Err(context) => raise("Expected opening curly bracket.", context),
     }
 
-    let body = get_block(&tokens, 5, source);
+    let body = get_block(&tokens, 5, source.to_string());
 
     if let Value::Identifier(name) = &tokens[1].value {
+        let mut function = Function {
+            name: name.to_string(),
+            args: vec![],
+            body: vec![],
+            local_functions: HashMap::new(),
+        };
+
+        parse(body.0, source.to_string(), &mut function);
+        
         return (
-            Node::Function(Function {
-                name: name.to_string(),
-                args: vec![],
-                body: body.0,
-                lfunctions: vec![],
-            }),
+            function,
             body.1 + 3,
         );
     } else {
@@ -492,7 +496,7 @@ fn parse_function(
     }
 }
 
-fn get_block(tokens: &Vec<Token>, start_i: usize, source: String) -> (Vec<Node>, usize) {
+fn get_block(tokens: &Vec<Token>, start_i: usize, source: String) -> (Vec<Token>, usize) {
     let mut block: Vec<Token> = Vec::new();
     let tokens = tokens.iter().skip(start_i);
 
@@ -517,7 +521,7 @@ fn get_block(tokens: &Vec<Token>, start_i: usize, source: String) -> (Vec<Node>,
         }
     }
 
-    return (parse(block.clone(), source), block.len());
+    return (block.clone(), block.len());
 }
 
 fn get_line(tokens: &Vec<Token>, start_i: usize) -> Vec<Token> {
@@ -533,11 +537,9 @@ fn get_line(tokens: &Vec<Token>, start_i: usize) -> Vec<Token> {
     line
 }
 
-pub fn parse(tokens: Vec<Token>, source: String) -> Vec<Node> {
+pub fn parse(tokens: Vec<Token>, source: String, chunk: &mut Function) {
     let temp_lines: Vec<&str> = source.split("\n").collect();
     let mut lines: Vec<String> = vec![];
-
-    let mut nodes: Vec<Node> = vec![];
 
     for line in temp_lines {
         lines.push(line.to_string());
@@ -555,7 +557,7 @@ pub fn parse(tokens: Vec<Token>, source: String) -> Vec<Node> {
                         tokens_iter.next();
                     }
 
-                    nodes.push(parse_assignment(
+                    chunk.body.push(parse_assignment(
                         &line,
                         &BaseContext {
                             base: token.line,
@@ -565,7 +567,7 @@ pub fn parse(tokens: Vec<Token>, source: String) -> Vec<Node> {
                     ));
                 }
                 "fn" => {
-                    let (node, skip) = parse_function(
+                    let (function, skip) = parse_function(
                         &tokens[idx..tokens.len()].to_vec(),
                         &BaseContext {
                             base: token.line,
@@ -579,7 +581,7 @@ pub fn parse(tokens: Vec<Token>, source: String) -> Vec<Node> {
                         tokens_iter.next();
                     }
 
-                    nodes.push(node)
+                    chunk.local_functions.insert((&function.name).to_string(), function);
                 }
                 _ => {}
             },
@@ -600,7 +602,7 @@ pub fn parse(tokens: Vec<Token>, source: String) -> Vec<Node> {
                     tokens_iter.next();
                 }
 
-                nodes.push(parse_expression(
+                chunk.body.push(parse_expression(
                     line,
                     &BaseContext {
                         base: token.line,
@@ -613,6 +615,5 @@ pub fn parse(tokens: Vec<Token>, source: String) -> Vec<Node> {
         }
     }
 
-    println!("{:#?}", nodes);
-    nodes
+    println!("{:#?}", chunk.body);
 }
