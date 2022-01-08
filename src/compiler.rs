@@ -1,7 +1,7 @@
 use crate::error::raise_internal;
 use crate::lexer;
-use crate::opcode::{Code, CodeObject, OpCode, Value};
 use crate::parser::Node;
+use crate::vm::opcode::{Code, CodeObject, OpCode, Value};
 
 fn to_literal(value: &lexer::Value) -> Value {
     match value.clone() {
@@ -30,34 +30,34 @@ fn get_operator_opcode(op: &String) -> Code {
 
 pub fn compile_expression(tree: &Node, code: &mut CodeObject) {
     match tree {
-        Node::Unary(value) => {
-            match value {
-                lexer::Value::False | lexer::Value::True | lexer::Value::None => {
-                    code.add_code(Code::OpCode(OpCode::LoadBuiltinValue));
-                    
-                    match value {
-                        lexer::Value::None => code.add_code(Code::Number(0)),
-                        lexer::Value::True => code.add_code(Code::Number(1)),
-                        lexer::Value::False => code.add_code(Code::Number(2)),
-                        _ => {}
-                    }
-                }
-                _ => {
-                    let index: usize = code.add_constant(to_literal(value));
+        Node::Unary(value) => match value {
+            lexer::Value::False | lexer::Value::True | lexer::Value::None => {
+                code.add_code(Code::OpCode(OpCode::LoadBuiltinValue));
 
-                    match value {
-                        lexer::Value::Identifier(_) => code.add_code(Code::OpCode(OpCode::LoadVariable)),
-                        _ => code.add_code(Code::OpCode(OpCode::LoadConst)),
-                    }
-
-                    code.add_code(Code::Number(index));
-
-                    if let lexer::Value::FormattedStr(_) = value {
-                        code.add_code(Code::OpCode(OpCode::FormatString))
-                    }
+                match value {
+                    lexer::Value::None => code.add_code(Code::Number(0)),
+                    lexer::Value::True => code.add_code(Code::Number(1)),
+                    lexer::Value::False => code.add_code(Code::Number(2)),
+                    _ => {}
                 }
             }
-        }
+            _ => {
+                let index: usize = code.add_constant(to_literal(value));
+
+                match value {
+                    lexer::Value::Identifier(_) => {
+                        code.add_code(Code::OpCode(OpCode::LoadVariable))
+                    }
+                    _ => code.add_code(Code::OpCode(OpCode::LoadConst)),
+                }
+
+                code.add_code(Code::Number(index));
+
+                if let lexer::Value::FormattedStr(_) = value {
+                    code.add_code(Code::OpCode(OpCode::FormatString))
+                }
+            }
+        },
         Node::Binary(binary) => {
             compile_expression(&binary.a, code);
             compile_expression(&binary.b, code);
@@ -70,6 +70,18 @@ pub fn compile_expression(tree: &Node, code: &mut CodeObject) {
 
             code.add_code(Code::OpCode(OpCode::BuildList));
             code.add_code(Code::Number(list.len()))
+        }
+        Node::FunctionCall(function) => {
+            if function.ismacro {
+                for argument in &function.args {
+                    compile_expression(argument, code);
+                }
+
+                let idx = code.add_constant(Value::String(function.name.to_string()));
+                code.add_code(Code::OpCode(OpCode::LoadConst));
+                code.add_code(Code::Number(idx));
+                code.add_code(Code::OpCode(OpCode::CallMacro));
+            }
         }
         _ => {}
     }
