@@ -5,6 +5,7 @@ mod lexer;
 mod parser;
 mod vm;
 
+use std::collections::HashMap;
 use std::fs;
 use std::{env, process::exit};
 
@@ -35,16 +36,22 @@ fn compile(path: &String) {
             }
 
             let tokens = lexer::tokenize(data.clone());
-            let code = compiler::compile(parser::parse(tokens, data));
+            let mut main = parser::Function {
+                name: "<main>".to_string(),
+                args: vec![],
+                body: vec![],
+                local_functions: HashMap::new()
+            };
+
+            parser::parse(tokens, data, &mut main);
+
+            println!("{:#?}", main);
+
+            let code = compiler::compile(main);
 
             let object_file_name = format!("{}.o", &filename[0..filename.len() - 3]);
 
             fs::write(object_file_name, lace_io::serialize(code.clone())).unwrap();
-
-            println!(
-                "Instructions: {:#?}\nConstants: {:#?}",
-                code.code, code.constants
-            )
         }
         Result::Err(_) => {
             println!("😐 Unable to read file");
