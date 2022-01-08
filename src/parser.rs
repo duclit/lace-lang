@@ -428,7 +428,7 @@ fn parse_assignment(tokens: &Vec<Token>, base_context: &BaseContext) -> Node {
                 value: Box::new(value),
             })
         } else {
-            exit(0) // this will literally never happen
+            raise_internal("0006");
         }
     } else {
         raise(
@@ -443,8 +443,6 @@ fn parse_assignment(tokens: &Vec<Token>, base_context: &BaseContext) -> Node {
 }
 
 fn parse_function_parameters(tokens: &Vec<Token>) -> Vec<String> {
-    
-    
     return vec!["".to_string()];
 }
 
@@ -471,10 +469,15 @@ fn parse_function(
 
     match expect(tokens, 2, Value::RParen, base_context, true) {
         Ok(_) => {}
-        Err(context) => raise("Expected RParen.", context),
+        Err(context) => raise("Expected closing parenthesis.", context),
     }
 
-    let body = get_block(&tokens, 3, source);
+    match expect(tokens, 3, Value::LCurly, base_context, true) {
+        Ok(_) => {}
+        Err(context) => raise("Expected opening curly bracket.", context),
+    }
+
+    let body = get_block(&tokens, 5, source);
 
     if let Value::Identifier(name) = &tokens[1].value {
         return (
@@ -499,11 +502,16 @@ fn get_block(tokens: &Vec<Token>, start_i: usize, source: String) -> (Vec<Node>,
 
     for token in tokens {
         match token.value {
-            Value::LCurly => bracket_stack.push(Value::LCurly),
+            Value::LCurly => {
+                bracket_stack.push(Value::LCurly);
+                block.push(token.clone())
+            }
             Value::RCurly => {
                 if bracket_stack.is_empty() {
+                    bracket_stack.push(Value::RCurly);
                     break;
                 } else {
+                    bracket_stack.push(Value::RCurly);
                     bracket_stack.pop();
                 }
             }
@@ -559,8 +567,10 @@ pub fn parse(tokens: Vec<Token>, source: String) -> Vec<Node> {
                     ));
                 }
                 "fn" => {
+
+
                     let (node, skip) = parse_function(
-                        &tokens[idx..tokens.len() - 1].to_vec(),
+                        &tokens[idx..tokens.len()].to_vec(),
                         &BaseContext {
                             base: token.line,
                             source: lines.clone(),
