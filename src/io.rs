@@ -1,4 +1,4 @@
-use crate::opcode::CodeObject;
+use crate::vm::opcode::CodeObject;
 
 use bincode;
 
