@@ -1,6 +1,6 @@
 use crate::error::raise_internal;
 use crate::lexer;
-use crate::parser::{Node, Function};
+use crate::parser::{Function, Node};
 use crate::vm::opcode::{Code, CodeObject, OpCode, Value};
 
 fn to_literal(value: &lexer::Value) -> Value {
@@ -24,6 +24,12 @@ fn get_operator_opcode(op: &String) -> Code {
         "^" => Code::OpCode(OpCode::Pow),
         ">>" => Code::OpCode(OpCode::RShift),
         "<<" => Code::OpCode(OpCode::LShift),
+        "==" => Code::OpCode(OpCode::Equal),
+        "!=" => Code::OpCode(OpCode::NotEqual),
+        "<=" => Code::OpCode(OpCode::LessOrEqual),
+        ">=" => Code::OpCode(OpCode::MoreOrEqual),
+        ">" => Code::OpCode(OpCode::More),
+        "<" => Code::OpCode(OpCode::Less),
         _ => raise_internal("0002"),
     }
 }
