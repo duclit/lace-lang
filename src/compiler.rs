@@ -80,8 +80,11 @@ pub fn compile_expression(tree: &Node, code: &mut CodeObject) {
             code.add_code(Code::Number(list.len()))
         }
         Node::FunctionCall(function) => {
+            let mut arguments = 0;
+
             for argument in &function.args {
                 compile_expression(argument, code);
+                arguments = arguments + 1;
             }
 
             let idx = code.add_constant(Value::String(function.name.to_string()));
@@ -92,6 +95,7 @@ pub fn compile_expression(tree: &Node, code: &mut CodeObject) {
             } else {
                 OpCode::CallFunction
             }));
+            code.add_code(Code::Number(arguments));
         }
         _ => {}
     }
@@ -102,6 +106,7 @@ pub fn compile(main: Function) -> CodeObject {
         code: vec![],
         constants: vec![],
         functions: HashMap::new(),
+        file: main.file,
     };
 
     for node in main.body {
