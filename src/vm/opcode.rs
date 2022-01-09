@@ -1,3 +1,5 @@
+use std::{collections::HashMap, process::exit};
+
 use serde::{Deserialize, Serialize};
 
 #[repr(u8)]
@@ -7,6 +9,7 @@ pub enum OpCode {
     LoadVariable,
     AssignVar,
     CallMacro,
+    CallFunction,
 
     // followed by number ranging from 0-2 (none, true & false)
     LoadBuiltinValue,
@@ -27,7 +30,7 @@ pub enum OpCode {
     More,
     Less,
     MoreOrEqual,
-    LessOrEqual
+    LessOrEqual,
 }
 
 pub trait Extract<T> {
@@ -78,7 +81,7 @@ impl Value {
             Value::Float(float) => float < &1.0,
             Value::List(vec) => vec.is_empty(),
             Value::Bool(bool) => *bool,
-            Value::None => false
+            Value::None => false,
         }
     }
 }
@@ -87,6 +90,8 @@ impl Value {
 pub struct CodeObject {
     pub code: Vec<Code>,
     pub constants: Vec<Value>,
+    pub functions: HashMap<String, CodeObject>,
+    pub file: String,
 }
 
 impl CodeObject {
