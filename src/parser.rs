@@ -142,21 +142,13 @@ fn parse_function_call(tokens: &Vec<&Token>, context: &BaseContext, ismacro: boo
             },
             _ => raise(
                 "Invalid syntax. Perhaps you forgot a comma?",
-                Context {
-                    idx: tokens[tokens.len() - 1].line,
-                    line: context.source[tokens[tokens.len() - 1].line].clone(),
-                    pointer: Option::None,
-                },
+                Context::new(tokens[tokens.len() - 1].line, &context.source, Option::None),
             ),
         }
     } else {
         raise(
             "Expected parenthesis after function name.",
-            Context {
-                idx: tokens[1].line,
-                line: context.source[tokens[1].line].clone(),
-                pointer: Option::None,
-            },
+            Context::new(tokens[1].line, &context.source, Option::None),
         )
     }
 }
@@ -165,11 +157,7 @@ fn parse_value(tokens: &Vec<&Token>, context: &BaseContext) -> Node {
     match tokens.len() {
         0 => raise(
             "Expected string, int, float, list or function call.",
-            Context {
-                idx: context.base,
-                line: context.source[context.base].clone(),
-                pointer: Option::None,
-            },
+            Context::new(context.base, &context.source, Option::None),
         ),
         _ => match tokens[0].value {
             Value::Str(_) | Value::Int(_) | Value::Float(_) | Value::FormattedStr(_) => {
@@ -177,11 +165,7 @@ fn parse_value(tokens: &Vec<&Token>, context: &BaseContext) -> Node {
                     1 => Node::Unary(tokens[0].clone().value),
                     _ => raise(
                         "Expected only one value. Perhaps you forgot a comma?",
-                        Context {
-                            idx: tokens[1].line,
-                            line: context.source[tokens[1].line].clone(),
-                            pointer: Option::None,
-                        },
+                        Context::new(tokens[1].line, &context.source, Option::None),
                     ),
                 }
             }
@@ -190,11 +174,7 @@ fn parse_value(tokens: &Vec<&Token>, context: &BaseContext) -> Node {
                 1 => Node::Unary(tokens[0].clone().value),
                 _ => raise(
                     "Expected only one value. Perhaps you forgot a comma?",
-                    Context {
-                        idx: tokens[1].line,
-                        line: context.source[tokens[1].line].clone(),
-                        pointer: Option::None,
-                    },
+                    Context::new(tokens[1].line, &context.source, Option::None),
                 ),
             },
 
@@ -203,11 +183,7 @@ fn parse_value(tokens: &Vec<&Token>, context: &BaseContext) -> Node {
                     Value::Identifier(_) => Node::Unary(tokens[0].clone().value),
                     Value::MacroIdentifier(_) => raise(
                         "Expected macro call.",
-                        Context {
-                            idx: tokens[0].line,
-                            line: context.source[tokens[0].line].clone(),
-                            pointer: Option::None,
-                        },
+                        Context::new(tokens[0].line, &context.source, Option::None),
                     ),
                     _ => raise_internal("0003"),
                 },
@@ -224,11 +200,7 @@ fn parse_value(tokens: &Vec<&Token>, context: &BaseContext) -> Node {
 
                     raise(
                         message,
-                        Context {
-                            idx: tokens[1].line,
-                            line: context.source[tokens[1].line].clone(),
-                            pointer: Option::None,
-                        },
+                        Context::new(tokens[1].line, &context.source, Option::None),
                     );
                 }
                 _ => parse_function_call(
@@ -246,20 +218,12 @@ fn parse_value(tokens: &Vec<&Token>, context: &BaseContext) -> Node {
                 }
                 _ => raise(
                     "Invalid syntax. Perhaps you forgot a comma?",
-                    Context {
-                        idx: tokens[tokens.len() - 1].line,
-                        line: context.source[tokens[tokens.len() - 1].line].clone(),
-                        pointer: Option::None,
-                    },
+                    Context::new(tokens[tokens.len() - 1].line, &context.source, Option::None),
                 ),
             },
             _ => raise(
                 "Expected string, int, float, list or function call.",
-                Context {
-                    idx: tokens[0].line,
-                    line: context.source[tokens[0].line].clone(),
-                    pointer: Option::None,
-                },
+                Context::new(tokens[0].line, &context.source, Option::None),
             ),
         },
     }
@@ -369,7 +333,9 @@ fn parse_equation(tokens: Vec<&Token>, context: &BaseContext) -> Node {
 
         for (_idx, token) in (&tokens).into_iter().enumerate() {
             if let Value::Operator(ref op) = token.value {
-                if (vec!["==", "!=", ">", "<", ">=", "<="].contains(&op.as_str())) && bracket_stack.is_empty() {
+                if (vec!["==", "!=", ">", "<", ">=", "<="].contains(&op.as_str()))
+                    && bracket_stack.is_empty()
+                {
                     operator = op.to_string();
                     break;
                 } else {
@@ -392,7 +358,7 @@ fn parse_equation(tokens: Vec<&Token>, context: &BaseContext) -> Node {
         let left_node: Node;
 
         let right_tokens = tokens[left_tokens.len() + 1..tokens.len()].to_vec();
-        
+
         if has_operators(&left_tokens, vec!["==", "!=", ">", "<", ">=", "<="]) {
             left_node = parse_equation(left_tokens, context);
         } else {
@@ -404,7 +370,7 @@ fn parse_equation(tokens: Vec<&Token>, context: &BaseContext) -> Node {
         Node::Binary(Box::new(BinaryNode {
             a: left_node,
             b: right_node,
-            o: operator
+            o: operator,
         }))
     } else {
         parse_expression(tokens, context)
@@ -419,11 +385,11 @@ fn expect(
     exact: bool,
 ) -> Result<(), Context> {
     if tokens.len() < idx + 2 {
-        return Result::Err(Context {
-            idx: tokens[tokens.len() - 1].line,
-            line: context.source[tokens[tokens.len() - 1].line].clone(),
-            pointer: Option::None,
-        });
+        return Result::Err(Context::new(
+            tokens[tokens.len() - 1].line,
+            &context.source,
+            Option::None,
+        ));
     }
 
     let token = &tokens[idx + 1];
@@ -433,33 +399,17 @@ fn expect(
     {
         Result::Ok(())
     } else {
-        return Result::Err(Context {
-            idx: token.line,
-            line: context.source[token.line].clone(),
-            pointer: Option::None,
-        });
+        return Result::Err(Context::new(token.line, &context.source, Option::None));
     }
 }
 
-fn parse_assignment(tokens: &Vec<Token>, base_context: &BaseContext) -> Node {
-    match expect(
-        tokens,
-        0,
-        Value::Identifier(String::new()),
-        base_context,
-        false,
-    ) {
+fn parse_assignment(tokens: &Vec<Token>, context: &BaseContext) -> Node {
+    match expect(tokens, 0, Value::Identifier(String::new()), context, false) {
         Ok(_) => {}
         Err(context) => raise("Expected identifier.", context),
     }
 
-    match expect(
-        tokens,
-        1,
-        Value::Operator(String::from("=")),
-        base_context,
-        true,
-    ) {
+    match expect(tokens, 1, Value::Operator(String::from("=")), context, true) {
         Ok(_) => {}
         Err(context) => match tokens.len() {
             2 => raise("Uninitialized variables are not allowed.", context),
@@ -469,8 +419,7 @@ fn parse_assignment(tokens: &Vec<Token>, base_context: &BaseContext) -> Node {
 
     if tokens.len() >= 4 {
         if let Value::Identifier(identifier) = &tokens[1].value {
-            let value =
-                parse_equation(tokens.iter().skip(3).collect::<Vec<&Token>>(), base_context);
+            let value = parse_equation(tokens.iter().skip(3).collect::<Vec<&Token>>(), context);
 
             Node::Assignment(VariableAssignment {
                 name: (*identifier).clone(),
@@ -482,16 +431,12 @@ fn parse_assignment(tokens: &Vec<Token>, base_context: &BaseContext) -> Node {
     } else {
         raise(
             "Expected expression.",
-            Context {
-                idx: tokens[2].line,
-                line: base_context.source[tokens[2].line].clone(),
-                pointer: Option::None,
-            },
+            Context::new(tokens[2].line, &context.source, Option::None),
         )
     }
 }
 
-fn parse_function_parameters(tokens: &Vec<Token>, base_context: &BaseContext) -> Vec<String> {
+fn parse_function_parameters(tokens: &Vec<Token>, context: &BaseContext) -> Vec<String> {
     let mut arguments: Vec<String> = vec![];
     let mut current_arguments: Vec<String> = vec![];
 
@@ -502,11 +447,7 @@ fn parse_function_parameters(tokens: &Vec<Token>, base_context: &BaseContext) ->
                 "," => match current_arguments.len() {
                     0 => raise(
                         "Expected identifier.",
-                        Context {
-                            idx: tokens[1].line,
-                            line: base_context.source[tokens[1].line].clone(),
-                            pointer: Option::None,
-                        },
+                        Context::new(tokens[1].line, &context.source, Option::None),
                     ),
                     1 => {
                         arguments.push(current_arguments[0].clone());
@@ -514,29 +455,17 @@ fn parse_function_parameters(tokens: &Vec<Token>, base_context: &BaseContext) ->
                     }
                     _ => raise(
                         "Expected only one identifier.",
-                        Context {
-                            idx: tokens[2].line,
-                            line: base_context.source[tokens[2].line].clone(),
-                            pointer: Option::None,
-                        },
+                        Context::new(tokens[2].line, &context.source, Option::None),
                     ),
                 },
                 _ => raise(
                     "Expected identifier or comma.",
-                    Context {
-                        idx: token.line,
-                        line: base_context.source[tokens[2].line].clone(),
-                        pointer: Option::None,
-                    },
+                    Context::new(token.line, &context.source, Option::None),
                 ),
             },
             _ => raise(
                 "Expected identifier or comma.",
-                Context {
-                    idx: token.line,
-                    line: base_context.source[tokens[2].line].clone(),
-                    pointer: Option::None,
-                },
+                Context::new(token.line, &context.source, Option::None),
             ),
         }
     }
@@ -544,23 +473,13 @@ fn parse_function_parameters(tokens: &Vec<Token>, base_context: &BaseContext) ->
     return arguments;
 }
 
-fn parse_function(
-    tokens: &Vec<Token>,
-    base_context: &BaseContext,
-    source: String,
-) -> (Function, usize) {
-    match expect(
-        tokens,
-        0,
-        Value::Identifier(String::new()),
-        base_context,
-        false,
-    ) {
+fn parse_function(tokens: &Vec<Token>, context: &BaseContext, source: String) -> (Function, usize) {
+    match expect(tokens, 0, Value::Identifier(String::new()), context, false) {
         Ok(_) => {}
         Err(context) => raise("Expected function name.", context),
     }
 
-    match expect(tokens, 1, Value::LParen, base_context, true) {
+    match expect(tokens, 1, Value::LParen, context, true) {
         Ok(_) => {}
         Err(context) => raise("Expected parameter list.", context),
     }
@@ -570,11 +489,11 @@ fn parse_function(
 
     //println!("{:?} {:?}", tokens, tokens[3]);
 
-    match expect(tokens, 2, Value::RParen, base_context, true) {
+    match expect(tokens, 2, Value::RParen, context, true) {
         Ok(_) => {
-            match expect(tokens, 4, Value::LCurly, base_context, true) {
-                Ok(_) => {},
-                Err(context) => raise("Expected opening curly braces", context)
+            match expect(tokens, 4, Value::LCurly, context, true) {
+                Ok(_) => {}
+                Err(context) => raise("Expected opening curly braces", context),
             }
 
             body = get_block(&tokens, 5, source.to_string());
@@ -589,11 +508,11 @@ fn parse_function(
                 }
             }
 
-            parameters = parse_function_parameters(&argument_tokens, base_context);
+            parameters = parse_function_parameters(&argument_tokens, context);
 
-            match expect(tokens, 4 + parameters.len(), Value::LCurly, base_context, true) {
-                Ok(_) => {},
-                Err(context) => raise("Expected opening curly braces", context)
+            match expect(tokens, 4 + parameters.len(), Value::LCurly, context, true) {
+                Ok(_) => {}
+                Err(context) => raise("Expected opening curly braces", context),
             }
 
             body = get_block(&tokens, 6 + parameters.len(), source.to_string());
