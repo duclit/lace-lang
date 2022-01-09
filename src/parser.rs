@@ -385,7 +385,7 @@ fn expect(
     context: &BaseContext,
     exact: bool,
 ) -> Result<(), Context> {
-    if tokens.len() < idx + 2 {
+    if idx >= tokens.len() {
         return Result::Err(Context::new(
             tokens[tokens.len() - 1].line,
             &context.source,
@@ -393,7 +393,7 @@ fn expect(
         ));
     }
 
-    let token = &tokens[idx + 1];
+    let token = &tokens[idx];
 
     if (!exact && discriminant(&token.value) == discriminant(&value))
         || (exact && token.value == value)
@@ -405,12 +405,12 @@ fn expect(
 }
 
 fn parse_assignment(tokens: &Vec<Token>, context: &BaseContext) -> Node {
-    match expect(tokens, 0, Value::Identifier(String::new()), context, false) {
+    match expect(tokens, 1, Value::Identifier(String::new()), context, false) {
         Ok(_) => {}
         Err(context) => raise("Expected identifier.", context),
     }
 
-    match expect(tokens, 1, Value::Operator(String::from("=")), context, true) {
+    match expect(tokens, 2, Value::Operator(String::from("=")), context, true) {
         Ok(_) => {}
         Err(context) => match tokens.len() {
             2 => raise("Uninitialized variables are not allowed.", context),
@@ -480,12 +480,12 @@ fn parse_function(
     source: String,
     file: String,
 ) -> (Function, usize) {
-    match expect(tokens, 0, Value::Identifier(String::new()), context, false) {
+    match expect(tokens, 1, Value::Identifier(String::new()), context, false) {
         Ok(_) => {}
         Err(context) => raise("Expected function name.", context),
     }
 
-    match expect(tokens, 1, Value::LParen, context, true) {
+    match expect(tokens, 2, Value::LParen, context, true) {
         Ok(_) => {}
         Err(context) => raise("Expected parameter list.", context),
     }
@@ -495,7 +495,9 @@ fn parse_function(
 
     //println!("{:?} {:?}", tokens, tokens[3]);
 
-    match expect(tokens, 2, Value::RParen, context, true) {
+    println!("{:#?}", tokens);
+
+    match expect(tokens, 3, Value::RParen, context, true) {
         Ok(_) => {
             match expect(tokens, 4, Value::LCurly, context, true) {
                 Ok(_) => {}
@@ -505,6 +507,11 @@ fn parse_function(
             body = get_block(&tokens, 5, source.to_string());
         }
         Err(_context) => {
+            match expect(tokens, 4, Value::LParen, context, true) {
+                Ok(_) => {}
+                Err(context) => raise("Expected closing parenthesis", context),
+            }
+
             let mut argument_tokens: Vec<Token> = vec![];
 
             for token in tokens.into_iter().skip(4).collect::<Vec<&Token>>() {
@@ -516,7 +523,7 @@ fn parse_function(
 
             parameters = parse_function_parameters(&argument_tokens, context);
 
-            match expect(tokens, 4 + parameters.len(), Value::LCurly, context, true) {
+            match expect(tokens, 5 + parameters.len(), Value::LCurly, context, true) {
                 Ok(_) => {}
                 Err(context) => raise("Expected opening curly braces", context),
             }
