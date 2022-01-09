@@ -32,6 +32,7 @@ pub struct Function {
     pub name: String,
     pub args: Vec<String>,
     pub body: Vec<Node>,
+    pub file: String,
     pub local_functions: HashMap<String, Function>,
 }
 
@@ -105,7 +106,7 @@ fn parse_list(tokens: &Vec<&Token>, context: &BaseContext) -> Vec<Node> {
     let mut ret: Vec<Node> = vec![];
 
     for element in elements {
-        ret.push(parse_expression(element, context))
+        ret.push(parse_equation(element, context))
     }
 
     ret
@@ -473,7 +474,12 @@ fn parse_function_parameters(tokens: &Vec<Token>, context: &BaseContext) -> Vec<
     return arguments;
 }
 
-fn parse_function(tokens: &Vec<Token>, context: &BaseContext, source: String) -> (Function, usize) {
+fn parse_function(
+    tokens: &Vec<Token>,
+    context: &BaseContext,
+    source: String,
+    file: String,
+) -> (Function, usize) {
     match expect(tokens, 0, Value::Identifier(String::new()), context, false) {
         Ok(_) => {}
         Err(context) => raise("Expected function name.", context),
@@ -524,6 +530,7 @@ fn parse_function(tokens: &Vec<Token>, context: &BaseContext, source: String) ->
             name: name.to_string(),
             args: parameters,
             body: vec![],
+            file,
             local_functions: HashMap::new(),
         };
 
@@ -539,7 +546,7 @@ fn get_block(tokens: &Vec<Token>, start_i: usize, _source: String) -> (Vec<Token
     let mut block: Vec<Token> = Vec::new();
     let tokens: Vec<&Token> = tokens.iter().skip(start_i).collect();
 
-    println!("{:?}", tokens);
+    //println!("{:?}", tokens);
 
     let mut bracket_stack: Vec<Value> = Vec::new();
 
@@ -615,6 +622,7 @@ pub fn parse(tokens: Vec<Token>, source: String, chunk: &mut Function) {
                             tokens: tokens.clone(),
                         },
                         source.to_string(),
+                        chunk.file.to_string(),
                     );
 
                     for _ in 0..skip {
