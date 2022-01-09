@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::error::raise_internal;
 use crate::lexer;
 use crate::parser::{Function, Node};
@@ -78,16 +80,18 @@ pub fn compile_expression(tree: &Node, code: &mut CodeObject) {
             code.add_code(Code::Number(list.len()))
         }
         Node::FunctionCall(function) => {
-            if function.ismacro {
-                for argument in &function.args {
-                    compile_expression(argument, code);
-                }
-
-                let idx = code.add_constant(Value::String(function.name.to_string()));
-                code.add_code(Code::OpCode(OpCode::LoadConst));
-                code.add_code(Code::Number(idx));
-                code.add_code(Code::OpCode(OpCode::CallMacro));
+            for argument in &function.args {
+                compile_expression(argument, code);
             }
+
+            let idx = code.add_constant(Value::String(function.name.to_string()));
+            code.add_code(Code::OpCode(OpCode::LoadConst));
+            code.add_code(Code::Number(idx));
+            code.add_code(Code::OpCode(if function.ismacro {
+                OpCode::CallMacro
+            } else {
+                OpCode::CallFunction
+            }));
         }
         _ => {}
     }
@@ -97,6 +101,7 @@ pub fn compile(main: Function) -> CodeObject {
     let mut code = CodeObject {
         code: vec![],
         constants: vec![],
+        functions: HashMap::new(),
     };
 
     for node in main.body {
@@ -111,8 +116,16 @@ pub fn compile(main: Function) -> CodeObject {
 
                 code.add_code(Code::OpCode(OpCode::AssignVar));
             }
+            Node::Unary(_) | Node::Binary(_) | Node::List(_) | Node::FunctionCall(_) => {
+                compile_expression(&node, &mut code);
+            }
             _ => {}
         }
+    }
+
+    // compile all local functions
+    for (name, function) in main.local_functions {
+        code.functions.insert(name, compile(function));
     }
 
     code
