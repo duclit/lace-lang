@@ -107,6 +107,7 @@ pub fn compile(main: Function) -> CodeObject {
         constants: vec![],
         functions: HashMap::new(),
         file: main.file,
+        parameters: main.args,
     };
 
     for node in main.body {
@@ -124,7 +125,6 @@ pub fn compile(main: Function) -> CodeObject {
             Node::Unary(_) | Node::Binary(_) | Node::List(_) | Node::FunctionCall(_) => {
                 compile_expression(&node, &mut code);
             }
-            _ => {}
         }
     }
 
