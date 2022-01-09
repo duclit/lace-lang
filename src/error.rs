@@ -46,3 +46,20 @@ pub fn raise_internal(code: &str) -> ! {
     println!("An unexpected error has occured (#{})", code);
     exit(0);
 }
+
+pub struct Data {
+    pub error: String,
+}
+
+impl Data {
+    pub fn new(line: usize, filename: String) -> Data {
+        Data {
+            error: format!("{}:{}", filename, line),
+        }
+    }
+
+    pub fn raise(&self, error: String) -> ! {
+        println!("{} {}", self.error, error);
+        exit(0);
+    }
+}
