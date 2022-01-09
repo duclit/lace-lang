@@ -7,6 +7,7 @@ mod vm;
 
 use std::collections::HashMap;
 use std::fs;
+use std::time::Instant;
 use std::{env, process::exit};
 
 use crate::io as lace_io;
@@ -30,7 +31,7 @@ fn compile(path: &String) {
         .unwrap();
 
     match data {
-        Result::Ok(data) => {
+        Ok(data) => {
             if !is_of_ext(".lc", &filename) {
                 error("Lace files must end with .lc")
             }
@@ -40,23 +41,48 @@ fn compile(path: &String) {
                 name: "<main>".to_string(),
                 args: vec![],
                 body: vec![],
-                local_functions: HashMap::new()
+                file: filename.to_string(),
+                local_functions: HashMap::new(),
             };
 
             parser::parse(tokens, data, &mut main);
+            let code = compiler::compile(main.clone());
 
-            println!("{:#?}", main);
-
-            let code = compiler::compile(main);
+            //println!("{:#?}\n-------------------------\n{:#?}", main, &code);
 
             let object_file_name = format!("{}.o", &filename[0..filename.len() - 3]);
 
             fs::write(object_file_name, lace_io::serialize(code.clone())).unwrap();
+            println!("Compiled succesfully.");
         }
-        Result::Err(_) => {
-            println!("😐 Unable to read file");
-            exit(0);
+        Err(_) => {
+            error("😐 Unable to read file");
         }
+    }
+}
+
+fn run(path: &String) {
+    let filename = std::path::Path::new(path)
+        .file_name()
+        .unwrap()
+        .to_os_string()
+        .into_string()
+        .unwrap();
+
+    if !is_of_ext(".o", &filename) {
+        error("Compiled lace files must end with .o")
+    }
+
+    let bytes = fs::read(path);
+
+    match bytes {
+        Ok(bytes) => {
+            let start = Instant::now();
+            let main = lace_io::deserialize(bytes);
+            vm::run(main);
+            println!("Execution took {:.2?}", start.elapsed());
+        }
+        Err(_) => error("😐 Unable to read file"),
     }
 }
 
@@ -69,7 +95,7 @@ fn main() {
 
     match args[1].as_str() {
         "build" => compile(&args[2]),
-        "run" => {}
+        "run" => run(&args[2]),
         _ => error(format!("🔎 Command '{}' not found.", args[1]).as_str()),
     }
 }
