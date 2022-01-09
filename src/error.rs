@@ -8,6 +8,16 @@ pub struct Context {
     pub pointer: Option<usize>,
 }
 
+impl Context {
+    pub fn new(idx: usize, source: &Vec<String>, pointer: Option<usize>) -> Context {
+        Context {
+            line: source[idx].to_string(),
+            idx,
+            pointer,
+        }
+    }
+}
+
 // base context, contains data required to build Context
 pub struct BaseContext {
     pub tokens: Vec<Token>,
