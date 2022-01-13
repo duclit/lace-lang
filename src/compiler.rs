@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::error::raise_internal;
 use crate::lexer;
 use crate::parser::{Function, Node};
-use crate::vm::opcode::{Code, CodeObject, OpCode, Value};
+use crate::vm::opcode::{CodeObject, OpCode, Value};
 
 fn to_literal(value: &lexer::Value) -> Value {
     match value.clone() {
@@ -16,22 +16,22 @@ fn to_literal(value: &lexer::Value) -> Value {
     }
 }
 
-fn get_operator_opcode(op: &String) -> Code {
+fn get_operator_opcode(op: &String) -> OpCode {
     match op.as_str() {
-        "+" => Code::OpCode(OpCode::Add),
-        "-" => Code::OpCode(OpCode::Sub),
-        "*" => Code::OpCode(OpCode::Mul),
-        "/" => Code::OpCode(OpCode::Div),
-        "%" => Code::OpCode(OpCode::Mod),
-        "^" => Code::OpCode(OpCode::Pow),
-        ">>" => Code::OpCode(OpCode::RShift),
-        "<<" => Code::OpCode(OpCode::LShift),
-        "==" => Code::OpCode(OpCode::Equal),
-        "!=" => Code::OpCode(OpCode::NotEqual),
-        "<=" => Code::OpCode(OpCode::LessOrEqual),
-        ">=" => Code::OpCode(OpCode::MoreOrEqual),
-        ">" => Code::OpCode(OpCode::More),
-        "<" => Code::OpCode(OpCode::Less),
+        "+" => OpCode::Add,
+        "-" => OpCode::Sub,
+        "*" => OpCode::Mul,
+        "/" => OpCode::Div,
+        "%" => OpCode::Mod,
+        "^" => OpCode::Pow,
+        ">>" => OpCode::RShift,
+        "<<" => OpCode::LShift,
+        "==" => OpCode::Equal,
+        "!=" => OpCode::NotEqual,
+        "<=" => OpCode::LessOrEqual,
+        ">=" => OpCode::MoreOrEqual,
+        ">" => OpCode::More,
+        "<" => OpCode::Less,
         _ => raise_internal("0002"),
     }
 }
@@ -45,29 +45,23 @@ pub fn compile_expression(tree: &Node, code: &mut CodeObject) {
         }
         Node::Unary(value) => match value {
             lexer::Value::False | lexer::Value::True | lexer::Value::None => {
-                code.add_code(Code::OpCode(OpCode::LoadBuiltinValue));
-
-                match value {
-                    lexer::Value::None => code.add_code(Code::Number(0)),
-                    lexer::Value::True => code.add_code(Code::Number(1)),
-                    lexer::Value::False => code.add_code(Code::Number(2)),
-                    _ => {}
-                }
+                code.add_code(OpCode::LoadBuiltinValue(match value {
+                    lexer::Value::None => 0,
+                    lexer::Value::True => 1,
+                    lexer::Value::False => 2,
+                    _ => raise_internal("0025"),
+                }));
             }
             _ => {
                 let index: usize = code.add_constant(to_literal(value));
 
                 match value {
-                    lexer::Value::Identifier(_) => {
-                        code.add_code(Code::OpCode(OpCode::LoadVariable))
-                    }
-                    _ => code.add_code(Code::OpCode(OpCode::LoadConst)),
+                    lexer::Value::Identifier(_) => code.add_code(OpCode::LoadVariable(index)),
+                    _ => code.add_code(OpCode::LoadConst(index)),
                 }
 
-                code.add_code(Code::Number(index));
-
                 if let lexer::Value::FormattedString(_) = value {
-                    code.add_code(Code::OpCode(OpCode::FormatString))
+                    code.add_code(OpCode::FormatString)
                 }
             }
         },
@@ -92,17 +86,14 @@ pub fn compile(main: Function) -> CodeObject {
                 compile_expression(&value, &mut code);
 
                 let idx = code.add_constant(Value::String(name));
-                code.add_code(Code::OpCode(OpCode::LoadConst));
-                code.add_code(Code::Number(idx));
-
-                code.add_code(Code::OpCode(OpCode::AssignVar));
+                code.add_code(OpCode::AssignVar(idx));
             }
             Node::Unary(_) | Node::Binary(..) => {
                 compile_expression(&node, &mut code);
             }
             Node::Return(value) => {
                 compile_expression(&value, &mut code);
-                code.add_code(Code::OpCode(OpCode::Return))
+                code.add_code(OpCode::Return)
             }
         }
     }
