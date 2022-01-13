@@ -206,16 +206,6 @@ impl Parser {
         return block;
     }
 
-    /*
-    Parse a literal
-
-    literal -> number
-        | float
-        | string
-        | function_call
-        | macro_call
-        ;
-    */
     pub fn literal(&mut self) -> Node {
         let token = self.advance();
 
@@ -264,18 +254,10 @@ impl Parser {
         return left;
     }
 
-    /*
-    Parse a multiplicative expression
-    multiplicative_expression -> literal ( '*' | '^' | '%' ) literal
-    */
     pub fn multiplicative_expr(&mut self) -> Node {
         self.binary_expression("literal", vec![Value::OpMul, Value::OpDiv, Value::OpPow])
     }
 
-    /*
-    Parse an additive expression
-    additive_expression -> multiplicative_expression ( '*' | '^' | '%' ) multiplicative_expression
-    */
     pub fn additive_expr(&mut self) -> Node {
         self.binary_expression("multiplicative", vec![Value::OpAdd, Value::OpSub])
     }
