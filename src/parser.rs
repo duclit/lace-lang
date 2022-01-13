@@ -12,7 +12,7 @@ pub enum Node {
     Unary(Value),
     Binary(Box<Node>, Box<Node>, String),
     VariableInit(String, Box<Node>),
-    Return(Box<Node>)
+    Return(Box<Node>),
 }
 
 #[derive(Debug, Clone)]
@@ -47,6 +47,7 @@ pub struct Parser {
 }
 
 impl Parser {
+    // create a new parser instance.
     pub fn new(tokens: Vec<Token>, source: Vec<String>) -> Parser {
         Parser {
             tokens: tokens.clone(),
@@ -57,6 +58,7 @@ impl Parser {
         }
     }
 
+    // raise an error.
     fn raise(&self, error: &str) -> ! {
         raise(
             error,
@@ -68,6 +70,7 @@ impl Parser {
         );
     }
 
+    // expect a token with a certain value, gives a result telling whether the token was found or not.
     fn expect_token(&mut self, value: Value, exact: bool) -> Result<Value, ()> {
         let token: Option<&(usize, Token)> = self.tokens_iter.peek();
 
@@ -90,6 +93,7 @@ impl Parser {
         }
     }
 
+    // expect a token with any value from a list of values. Useful in expecting assignment operators. (*=, /=, +=, etc)
     fn expect_exact_tokens(&mut self, values: Vec<Value>) -> Result<Value, ()> {
         let token: Option<(usize, Token)> = self.tokens_iter.next();
 
@@ -112,6 +116,7 @@ impl Parser {
         return Err(());
     }
 
+    // same as expect_exact_tokens, but raises an error if the token is not found.
     fn expect_exact(&mut self, values: Vec<Value>, err: &str) -> Value {
         match self.expect_exact_tokens(values) {
             Ok(value) => value,
@@ -119,6 +124,7 @@ impl Parser {
         }
     }
 
+    // same as expect_token, but raises an error if the token is not found.
     fn expect(&mut self, value: Value, exact: bool, err: &str) -> Value {
         match self.expect_token(value, exact) {
             Ok(value) => value,
@@ -126,6 +132,8 @@ impl Parser {
         }
     }
 
+    // consume the next token in the tokens iterator.
+    // MUST USE this as it sets a few attributes on this struct, and the parser might break otherwise.
     fn advance(&mut self) -> Option<(usize, Token)> {
         let current = self.tokens_iter.next();
         println!("{:?}", current);
@@ -140,6 +148,7 @@ impl Parser {
         }
     }
 
+    // convert a token value representing an operator to a string.
     fn operator_to_string(&mut self, operator: Value) -> String {
         match operator {
             Value::OpMul => "*".to_string(),
@@ -151,6 +160,7 @@ impl Parser {
         }
     }
 
+    // convert a token value representing a type to a type for the compiler/vm
     fn to_type(&mut self, value: Value) -> Type {
         match value {
             Value::TypeBool => Type::Bool,
@@ -161,6 +171,7 @@ impl Parser {
         }
     }
 
+    // get a block of code. Raises an error if self.current.value is not Value::LCurly.
     fn get_block(&mut self) -> Vec<Token> {
         let mut block: Vec<Token> = vec![];
         let mut bracket_stack: Vec<Value> = vec![];
@@ -195,34 +206,35 @@ impl Parser {
         return block;
     }
 
-    fn get_line(&mut self) -> Vec<Token> {
-        let mut line: Vec<Token> = vec![self.current.clone()];
+    /*
+    Parse a literal
 
-        while let Some((idx, current)) = self.advance() {
-            self.current = current.clone();
-            self.current_idx = idx;
-
-            match current.value {
-                Value::Semicolon => break,
-                _ => line.push(current),
-            }
-        }
-
-        return line;
-    }
-
+    literal -> number
+        | float
+        | string
+        | function_call
+        | macro_call
+        ;
+    */
     pub fn literal(&mut self) -> Node {
         let token = self.advance();
 
         match token {
             Some((_, token)) => match token.value {
-                Value::Int(_) | Value::String(_) | Value::FormattedString(_) | Value::Identifier(_) | Value::Float(_) => return Node::Unary(token.value),
-                _ => self.raise("Unexpected token.")
-            }
-            None => self.raise("Expected value.") 
+                Value::Int(_)
+                | Value::String(_)
+                | Value::FormattedString(_)
+                | Value::Identifier(_)
+                | Value::Float(_) => Node::Unary(token.value),
+                _ => self.raise("Unexpected token."),
+            },
+            None => self.raise("Expected value."),
         }
     }
 
+    // helper function for parsing binary expression.
+    // builder -> the function you want to use to parse the left and right sides
+    // operators -> the operators you recognize on this precedence level
     pub fn binary_expression(&mut self, builder: &str, operators: Vec<Value>) -> Node {
         let mut left = match builder {
             "literal" => self.literal(),
@@ -252,10 +264,18 @@ impl Parser {
         return left;
     }
 
+    /*
+    Parse a multiplicative expression
+    multiplicative_expression -> literal ( '*' | '^' | '%' ) literal
+    */
     pub fn multiplicative_expr(&mut self) -> Node {
         self.binary_expression("literal", vec![Value::OpMul, Value::OpDiv, Value::OpPow])
     }
 
+    /*
+    Parse an additive expression
+    additive_expression -> multiplicative_expression ( '*' | '^' | '%' ) multiplicative_expression
+    */
     pub fn additive_expr(&mut self) -> Node {
         self.binary_expression("multiplicative", vec![Value::OpAdd, Value::OpSub])
     }
@@ -264,6 +284,7 @@ impl Parser {
         self.additive_expr()
     }
 
+    // main parse function
     pub fn parse(&mut self, chunk: &mut Function) {
         while let Some((_, current)) = self.advance() {
             match current.value {
@@ -303,13 +324,23 @@ impl Parser {
 
                     self.expect_exact(vec![Value::Assign], "Expected assignment operator.");
                     let expression = self.primary_expr();
-                    self.expect(Value::Semicolon, true, "Unexpected token. Perhaps you missed a semicolon?");
+                    self.expect(
+                        Value::Semicolon,
+                        true,
+                        "Unexpected token. Perhaps you missed a semicolon?",
+                    );
 
-                    chunk.body.push(Node::VariableInit(name, Box::new(expression)));
+                    chunk
+                        .body
+                        .push(Node::VariableInit(name, Box::new(expression)));
                 }
                 Value::KeywordReturn => {
                     let expression = self.primary_expr();
-                    self.expect(Value::Semicolon, true, "Unexpected token. Perhaps you missed a semicolon?");
+                    self.expect(
+                        Value::Semicolon,
+                        true,
+                        "Unexpected token. Perhaps you missed a semicolon?",
+                    );
 
                     chunk.body.push(Node::Return(Box::new(expression)));
                 }
@@ -317,6 +348,6 @@ impl Parser {
             }
         }
 
-        println!("{:?}", chunk.body);
+        println!("{:?}", chunk.body); // for debugging
     }
 }
