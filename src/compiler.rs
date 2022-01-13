@@ -7,8 +7,8 @@ use crate::vm::opcode::{Code, CodeObject, OpCode, Value};
 
 fn to_literal(value: &lexer::Value) -> Value {
     match value.clone() {
-        lexer::Value::Str(str) => Value::String(str),
-        lexer::Value::FormattedStr(str) => Value::String(str),
+        lexer::Value::String(str) => Value::String(str),
+        lexer::Value::FormattedString(str) => Value::String(str),
         lexer::Value::Int(int) => Value::Integer(int),
         lexer::Value::Float(float) => Value::Float(float),
         lexer::Value::Identifier(iden) => Value::String(iden),
@@ -38,6 +38,11 @@ fn get_operator_opcode(op: &String) -> Code {
 
 pub fn compile_expression(tree: &Node, code: &mut CodeObject) {
     match tree {
+        Node::Binary(left, right, op) => {
+            compile_expression(left, code);
+            compile_expression(right, code);
+            code.add_code(get_operator_opcode(&op));
+        }
         Node::Unary(value) => match value {
             lexer::Value::False | lexer::Value::True | lexer::Value::None => {
                 code.add_code(Code::OpCode(OpCode::LoadBuiltinValue));
@@ -61,47 +66,18 @@ pub fn compile_expression(tree: &Node, code: &mut CodeObject) {
 
                 code.add_code(Code::Number(index));
 
-                if let lexer::Value::FormattedStr(_) = value {
+                if let lexer::Value::FormattedString(_) = value {
                     code.add_code(Code::OpCode(OpCode::FormatString))
                 }
             }
         },
-        Node::Binary(binary) => {
-            compile_expression(&binary.a, code);
-            compile_expression(&binary.b, code);
-            code.add_code(get_operator_opcode(&binary.o))
-        }
-        Node::List(list) => {
-            for expression in list {
-                compile_expression(&expression, code);
-            }
-
-            code.add_code(Code::OpCode(OpCode::BuildList));
-            code.add_code(Code::Number(list.len()))
-        }
-        Node::FunctionCall(function) => {
-            let mut arguments = 0;
-
-            for argument in &function.args {
-                compile_expression(argument, code);
-                arguments = arguments + 1;
-            }
-
-            let idx = code.add_constant(Value::String(function.name.to_string()));
-            code.add_code(Code::OpCode(OpCode::LoadConst));
-            code.add_code(Code::Number(idx));
-            code.add_code(Code::OpCode(if function.ismacro {
-                OpCode::CallMacro
-            } else {
-                OpCode::CallFunction
-            }));
-            code.add_code(Code::Number(arguments));
-        }
-        _ => {}
+        _ => raise_internal("0022"),
     }
 }
 
 pub fn compile(main: Function) -> CodeObject {
+    println!("Compiling func: {}{:?}", main.name, main.args);
+
     let mut code = CodeObject {
         code: vec![],
         constants: vec![],
@@ -112,18 +88,21 @@ pub fn compile(main: Function) -> CodeObject {
 
     for node in main.body {
         match node {
-            Node::Assignment(assignment) => {
-                compile_expression(&assignment.value, &mut code);
+            Node::VariableInit(name, value) => {
+                compile_expression(&value, &mut code);
 
-                let name = assignment.name;
                 let idx = code.add_constant(Value::String(name));
                 code.add_code(Code::OpCode(OpCode::LoadConst));
                 code.add_code(Code::Number(idx));
 
                 code.add_code(Code::OpCode(OpCode::AssignVar));
             }
-            Node::Unary(_) | Node::Binary(_) | Node::List(_) | Node::FunctionCall(_) => {
+            Node::Unary(_) | Node::Binary(..) => {
                 compile_expression(&node, &mut code);
+            }
+            Node::Return(value) => {
+                compile_expression(&value, &mut code);
+                code.add_code(Code::OpCode(OpCode::Return))
             }
         }
     }
