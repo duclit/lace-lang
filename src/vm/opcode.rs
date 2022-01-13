@@ -1,21 +1,23 @@
-use std::{collections::HashMap, process::exit};
+use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
+
+type ValueIdx = usize;
+type NameIdx = usize;
+type Length = usize;
 
 #[repr(u8)]
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub enum OpCode {
-    LoadConst,
-    LoadVariable,
-    AssignVar,
-    CallMacro,
-    CallFunction,
-
-    // followed by number ranging from 0-2 (none, true & false)
-    LoadBuiltinValue,
+    LoadConst(ValueIdx),
+    LoadVariable(NameIdx),
+    AssignVar(NameIdx),
+    CallMacro(NameIdx, Length),
+    CallFunction(NameIdx, Length),
+    LoadBuiltinValue(ValueIdx),
 
     FormatString,
-    BuildList,
+    BuildList(Length),
 
     Add,
     Sub,
@@ -31,36 +33,9 @@ pub enum OpCode {
     Less,
     MoreOrEqual,
     LessOrEqual,
-}
 
-pub trait Extract<T> {
-    fn extract(self) -> Option<T>;
-}
-
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-pub enum Code {
-    OpCode(OpCode),
-    Number(usize),
-}
-
-impl Extract<usize> for Code {
-    fn extract(self) -> Option<usize> {
-        if let Code::Number(num) = self {
-            Option::Some(num)
-        } else {
-            Option::None
-        }
-    }
-}
-
-impl Extract<OpCode> for Code {
-    fn extract(self) -> Option<OpCode> {
-        if let Code::OpCode(opc) = self {
-            Option::Some(opc)
-        } else {
-            Option::None
-        }
-    }
+    Return,
+    ReturnNone,
 }
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
@@ -68,8 +43,16 @@ pub enum Value {
     String(String),
     Integer(i64),
     Float(f64),
-    List(Vec<Value>),
     Bool(bool),
+    None,
+}
+
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub enum Type {
+    String,
+    Integer,
+    Float,
+    Bool,
     None,
 }
 
@@ -79,7 +62,6 @@ impl Value {
             Value::String(str) => str.is_empty(),
             Value::Integer(int) => int < &1,
             Value::Float(float) => float < &1.0,
-            Value::List(vec) => vec.is_empty(),
             Value::Bool(bool) => *bool,
             Value::None => false,
         }
@@ -88,14 +70,15 @@ impl Value {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CodeObject {
-    pub code: Vec<Code>,
+    pub code: Vec<OpCode>,
     pub constants: Vec<Value>,
+    pub parameters: Vec<String>,
     pub functions: HashMap<String, CodeObject>,
     pub file: String,
 }
 
 impl CodeObject {
-    pub fn add_code(&mut self, code: Code) {
+    pub fn add_code(&mut self, code: OpCode) {
         self.code.push(code);
     }
 
