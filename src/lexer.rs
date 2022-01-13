@@ -1,10 +1,22 @@
-use crate::error::{raise, Context};
+use std::{iter::Peekable, str::Chars};
+
+use crate::error::{raise, raise_internal, Context};
+use owned_chars;
+use regex;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
-    Str(String),
-    FormattedStr(String),
-    Keyword(String),
+    String(String),
+    FormattedString(String),
+
+    KeywordLet,
+    KeywordFn,
+    KeywordReturn,
+
+    TypeInt,
+    TypeFloat,
+    TypeString,
+    TypeBool,
 
     Int(i64),
     Float(f64),
@@ -18,225 +30,231 @@ pub enum Value {
     LSquare,
     RSquare,
 
+    Assign,
+    Bang,
+
+    Colon,
     Semicolon,
 
     True,
     False,
     None,
 
-    Operator(String),
+    OpAdd,
+    OpSub,
+    OpMul,
+    OpDiv,
+    OpPow,
+}
+
+pub type Identifier = String;
+
+pub trait Extract<T> {
+    fn extract(self) -> Option<T>;
+}
+
+impl Extract<Identifier> for Value {
+    fn extract(self) -> Option<String> {
+        if let Value::Identifier(i) = self {
+            Some(i)
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token {
     pub value: Value,
     pub line: usize,
+    pub start: usize,
+    pub end: usize,
 }
 
-fn grab<F: Fn(char) -> bool>(source: &String, i: usize, check: F) -> (String, usize) {
-    let source: String = (*source).chars().skip(i + 1).collect::<String>();
+impl Token {
+    pub fn new(value: Value, line: usize, start: usize, end: usize) -> Token {
+        Token {
+            value,
+            line,
+            start,
+            end,
+        }
+    }
+}
 
-    let mut idx: usize = 0;
-    let mut captured: String = String::new();
+pub struct Tokenizer {
+    pub current: char,
+    pub current_i: usize,
+    pub line_i: usize,
+    pub source: String,
+    pub source_iter: Peekable<owned_chars::OwnedChars>,
+    pub tokens: Vec<Token>,
+    pub source_lines: Vec<String>,
+}
 
-    for ch in source.chars() {
-        if check(ch) {
-            captured.push(ch);
-            idx += 1;
-        } else {
-            break;
+impl Tokenizer {
+    pub fn new(source: String) -> Tokenizer {
+        let source_chars = owned_chars::OwnedChars::from_string(source.clone()).peekable();
+
+        Tokenizer {
+            current: ' ',
+            source: source.clone(),
+            source_iter: source_chars,
+            current_i: 0,
+            line_i: 0,
+            tokens: vec![],
+            source_lines: source.split("\n").map(|word| word.to_string()).collect(),
         }
     }
 
-    (captured, idx)
-}
+    fn advance(&mut self) -> Option<char> {
+        let current = self.source_iter.next();
 
-pub fn construct(value: Value, line: usize) -> Token {
-    Token { value, line }
-}
+        match current {
+            Some(ch) => {
+                self.current = ch;
 
-pub fn tokenize(mut source: String) -> Vec<Token> {
-    let mut tokens: Vec<Token> = vec![];
-    let mut line_idx: usize = 0;
-
-    let keywords: Vec<&str> = vec!["let", "fn"];
-
-    source.push(' ');
-    let lines: Vec<&str> = source.split("\n").collect();
-    let line: &str = lines[line_idx];
-    let mut source_iter = source.char_indices();
-
-    while let Some((i, ch)) = source_iter.next() {
-        if ch == '\n' {
-            line_idx += 1;
-        } else if ch == ';' {
-            tokens.push(construct(Value::Semicolon, line_idx));
-        } else if "()[]{}".contains(ch) {
-            match ch {
-                '(' => tokens.push(construct(Value::LParen, line_idx)),
-                ')' => tokens.push(construct(Value::RParen, line_idx)),
-                '[' => tokens.push(construct(Value::LSquare, line_idx)),
-                ']' => tokens.push(construct(Value::RSquare, line_idx)),
-                '{' => tokens.push(construct(Value::LCurly, line_idx)),
-                '}' => tokens.push(construct(Value::RCurly, line_idx)),
-                _ => {}
-            }
-        }
-        // handle operators
-        else if "+-*/><=!,^%".contains(ch) {
-            let following = source.chars().nth(i + 1);
-
-            match following {
-                Option::Some(op) => {
-                    if op == '=' {
-                        tokens.push(construct(Value::Operator(format!("{}=", ch)), line_idx));
-                        source_iter.next();
-                    } else if op == '>' && ch == '-' {
-                        tokens.push(construct(Value::Operator(format!("->")), line_idx));
-                        source_iter.next();
-                    } else if "<>".contains(op) && op == ch {
-                        tokens.push(construct(
-                            Value::Operator(format!("{}{}", op, ch)),
-                            line_idx,
-                        ));
-                        source_iter.next();
-                    } else if ch == '/' && op == '/' {
-                        loop {
-                            let ch = source_iter.next();
-
-                            match ch {
-                                Option::Some((_idx, ch)) => {
-                                    if ch == '\n' {
-                                        line_idx += 1;
-                                        break;
-                                    }
-                                }
-
-                                Option::None => break,
-                            }
-                        }
-                    } else if ch == ',' {
-                        tokens.push(construct(Value::Operator(String::from(",")), line_idx));
-                    } else {
-                        tokens.push(construct(Value::Operator(String::from(ch)), line_idx));
-                    }
+                if ch == '\n' {
+                    self.line_i += 1;
+                    self.current_i = 0;
+                } else {
+                    self.current_i += 1;
                 }
-                Option::None => raise(
-                    "Expected value",
-                    Context {
-                        line: line.to_string(),
-                        idx: line_idx,
-                        pointer: Option::None,
-                    },
-                ),
-            }
-        }
-        // handle strings
-        else if "\"'`".contains(ch) {
-            let (string, i) = grab(&source, i, move |de| de != ch);
 
-            // skip the amount of characters that were grabbed
-            for _ in 0..i + 1 {
-                source_iter.next();
+                Option::Some(ch)
             }
 
-            match ch {
-                '\'' => tokens.push(construct(Value::Str(string), line_idx)),
-                '"' => tokens.push(construct(Value::Str(string), line_idx)),
-                '`' => tokens.push(construct(Value::FormattedStr(string), line_idx)),
-                _ => {}
-            }
-        }
-        // handle identifiers
-        else if ch.is_ascii_alphabetic() || "_!".contains(ch) {
-            let (identifier, i) = grab(&source, i - 1, |fr| {
-                fr.is_ascii_alphanumeric() || "_!".contains(fr)
-            });
-
-            // skip the amount of characters that were grabbed
-            for _ in 0..i - 1 {
-                source_iter.next();
-            }
-
-            match keywords.contains(&identifier.as_str()) {
-                true => tokens.push(construct(Value::Keyword(identifier), line_idx)),
-                false => {
-                    if identifier.contains('!') {
-                        if identifier.chars().filter(|&n| n == '!').count() == 1
-                            && identifier.ends_with('!')
-                        {
-                            tokens.push(construct(Value::MacroIdentifier(identifier), line_idx))
-                        } else {
-                            raise(
-                                "Unexpected token '!'",
-                                Context {
-                                    line: line.to_string(),
-                                    idx: line_idx,
-                                    pointer: Option::Some(
-                                        i + (identifier.len()
-                                            - identifier.match_indices("!").nth(1).unwrap().0),
-                                    ),
-                                },
-                            )
-                        }
-                    } else {
-                        match identifier.as_str() {
-                            "true" => tokens.push(construct(Value::True, line_idx)),
-                            "false" => tokens.push(construct(Value::False, line_idx)),
-                            "none" => tokens.push(construct(Value::None, line_idx)),
-                            _ => tokens.push(construct(Value::Identifier(identifier), line_idx)),
-                        }
-                    }
-                }
-            }
-        }
-        // handle integers and floats
-        else if "1234567890.".contains(ch) {
-            let (int, r) = grab(&source, i - 1, |cu| "1234567890.".contains(cu));
-
-            // skip the amount of characters that were grabbed
-            for _ in 0..r - 1 {
-                source_iter.next();
-            }
-
-            let count = int.matches(".").count();
-
-            match count {
-                0 => match int.parse::<i64>() {
-                    Result::Ok(int) => tokens.push(construct(Value::Int(int), line_idx)),
-                    Result::Err(_) => raise(
-                        "Integer literal is too large.",
-                        Context {
-                            line: line.to_string(),
-                            idx: line_idx,
-                            pointer: Option::None,
-                        },
-                    ),
-                },
-                1 => match int.parse::<f64>() {
-                    Result::Ok(float) => tokens.push(construct(Value::Float(float), line_idx)),
-                    Result::Err(_) => raise(
-                        "Float literal is too large.",
-                        Context {
-                            line: line.to_string(),
-                            idx: line_idx,
-                            pointer: Option::None,
-                        },
-                    ),
-                },
-                _ => raise(
-                    "Float can only have one decimal point",
-                    Context {
-                        line: line.to_string(),
-                        idx: line_idx,
-                        pointer: Option::Some(
-                            i + (int.len() - int.match_indices(".").nth(1).unwrap().0),
-                        ),
-                    },
-                ),
-            }
+            None => Option::None,
         }
     }
 
-    tokens
+    fn add_token(&mut self, value: Value, start: usize) {
+        self.tokens
+            .push(Token::new(value, self.line_i, start, self.current_i))
+    }
+
+    fn raise(&mut self, error: &str) -> ! {
+        raise(
+            error,
+            Context {
+                line: self.source_lines[self.line_i].to_string(),
+                idx: self.line_i,
+                pointer: Option::None,
+            },
+        )
+    }
+
+    fn string(&mut self, delimiter: char) {
+        let mut string = String::new();
+        let start_i = self.current_i - 1;
+
+        while let Some(ch) = self.advance() {
+            if ch == delimiter {
+                break;
+            } else {
+                string.push(ch)
+            }
+        }
+
+        match delimiter {
+            '\'' | '"' => self.add_token(Value::String(string), start_i),
+            '`' => self.add_token(Value::FormattedString(string), start_i),
+            _ => {}
+        }
+    }
+
+    fn identifier(&mut self) {
+        let mut string = String::new();
+        let start_i = self.current_i - 1;
+
+        string.push(self.current);
+
+        while let Some(ch) = self.source_iter.peek() {
+            if ch.is_alphanumeric() || *ch == '_' {
+                string.push(*ch);
+                self.advance();
+            } else {
+                break;
+            }
+        }
+
+        match string.as_str() {
+            "let" => self.add_token(Value::KeywordLet, start_i),
+            "fn" => self.add_token(Value::KeywordFn, start_i),
+            "return" => self.add_token(Value::KeywordReturn, start_i),
+            "none" => self.add_token(Value::None, start_i),
+            "true" => self.add_token(Value::True, start_i),
+            "false" => self.add_token(Value::False, start_i),
+            "float" => self.add_token(Value::TypeFloat, start_i),
+            "int" => self.add_token(Value::TypeInt, start_i),
+            "string" => self.add_token(Value::TypeString, start_i),
+            "bool" => self.add_token(Value::TypeBool, start_i),
+            _ => self.add_token(Value::Identifier(string), start_i),
+        }
+    }
+
+    fn integer(&mut self) {
+        let mut int = String::new();
+        let start_i = self.current_i - 1;
+
+        int.push(self.current);
+
+        while let Some(ch) = self.source_iter.peek() {
+            if "0.123456789".contains(*ch) {
+                int.push(*ch);
+                self.advance();
+            } else {
+                break;
+            }
+        }
+
+        let count = int.matches(".").count();
+
+        match count {
+            0 => match int.parse::<i64>() {
+                Result::Ok(int) => self.add_token(Value::Int(int), start_i),
+                Result::Err(_) => self.raise("Integer literal is too large."),
+            },
+            1 => match int.parse::<f64>() {
+                Result::Ok(float) => self.add_token(Value::Float(float), start_i),
+                Result::Err(_) => self.raise("Float literal is too large."),
+            },
+            _ => self.raise("Float can have only one decimal point."),
+        }
+    }
+
+    pub fn tokenize(&mut self) {
+        let whitespace = regex::Regex::new(r"\s").unwrap();
+
+        while let Some(ch) = self.advance() {
+            if "'`\"".contains(ch) {
+                self.string(ch);
+            } else if "123456789.0".contains(ch) {
+                self.integer();
+            } else if ch.is_alphabetic() || ch == '_' {
+                self.identifier();
+            } else {
+                match ch {
+                    '+' => self.add_token(Value::OpAdd, self.current_i),
+                    '-' => self.add_token(Value::OpSub, self.current_i),
+                    '*' => self.add_token(Value::OpMul, self.current_i),
+                    '/' => self.add_token(Value::OpDiv, self.current_i),
+                    '^' => self.add_token(Value::OpPow, self.current_i),
+                    '{' => self.add_token(Value::LCurly, self.current_i),
+                    '}' => self.add_token(Value::RCurly, self.current_i),
+                    '(' => self.add_token(Value::LParen, self.current_i),
+                    ')' => self.add_token(Value::RParen, self.current_i),
+                    ':' => self.add_token(Value::Colon, self.current_i),
+                    '=' => self.add_token(Value::Assign, self.current_i),
+                    '!' => self.add_token(Value::Bang, self.current_i),
+                    ';' => self.add_token(Value::Semicolon, self.current_i),
+                    _ => {
+                        if !whitespace.is_match(ch.to_string().as_str()) {
+                            self.raise(format!("Unknown character '{}'", ch).as_str())
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
