@@ -12,6 +12,7 @@ pub enum Value {
     KeywordLet,
     KeywordFn,
     KeywordReturn,
+    KeywordStruct,
 
     TypeInt,
     TypeFloat,
@@ -188,6 +189,7 @@ impl Tokenizer {
             "float" => self.add_token(Value::TypeFloat, start_i),
             "int" => self.add_token(Value::TypeInt, start_i),
             "string" => self.add_token(Value::TypeString, start_i),
+            "struct" => self.add_token(Value::KeywordStruct, start_i),            
             "bool" => self.add_token(Value::TypeBool, start_i),
             _ => self.add_token(Value::Identifier(string), start_i),
         }
