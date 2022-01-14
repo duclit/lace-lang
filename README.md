@@ -1,2 +1,13 @@
-Lace is an efficient, modern and predictable programming language written in [rust](https://www.rust-lang.org/).
-![Banner](https://cdn.discordapp.com/attachments/892083244340756530/929444286431375450/lacebanner.png)
+Lace is an efficient, modern and predictable procedural programming language written in [rust](https://www.rust-lang.org/).
+
+- Easy to write: Lace's syntax is easy to learn and write, saving you development time.
+
+
+- <code>Speed benchmarks and WASM compiler coming soon.</code>
+
+### Features
+Lace features a curly-bracket syntax, with support for structs with functions. (Note that this is _not_ OOP, as it does not support concepts such as inheritance or polymorphism.)
+A hello world lace program would look like this:
+```rs
+writeln!("Hello, world!");
+```
