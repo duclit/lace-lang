@@ -27,6 +27,10 @@ pub fn run(
     let mut stack: Vec<Value> = vec![];
     let mut variables: HashMap<&String, Value> = variables;
 
+    let mut macros: HashMap<&str, fn(Vec<Value>) -> Value> = HashMap::new();
+
+    macros.insert("writeln", r#macro::writeln);
+
     for opcode in function.code {
         match opcode {
             OpCode::LoadConst(idx) => stack.push(function.constants[idx].clone()),
@@ -80,13 +84,14 @@ pub fn run(
 
                     arguments.reverse();
 
-                    match name.as_str() {
-                        "writeln!" => {
-                            r#macro::writeln(arguments);
-                        }
-                        _ => Data::new(0, function.file.clone())
-                            .raise(format!("Macro {} not found.", name)),
+                    if !macros.contains_key(name.as_str()) {
+                        Data::new(0, function.file.clone())
+                            .raise(format!("Macro {} not found.", name))
                     }
+                    
+                    // get the function from the macros hashmap and call it
+                    let value = macros.get(name.as_str()).unwrap()(arguments);
+                    stack.push(value);
                 } else {
                     raise_internal("0009")
                 }
