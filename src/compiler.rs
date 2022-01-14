@@ -65,6 +65,16 @@ pub fn compile_expression(tree: &Node, code: &mut CodeObject) {
                 }
             }
         },
+        Node::MacroCall(name, arguments) => {
+            let args_len = arguments.len();
+            let name_idx = code.add_constant(Value::String(name.to_string()));
+
+            for argument in arguments {
+                compile_expression(&argument, code);
+            }
+
+            code.add_code(OpCode::CallMacro(name_idx, args_len));
+        }
         _ => raise_internal("0022"),
     }
 }
@@ -88,13 +98,14 @@ pub fn compile(main: Function) -> CodeObject {
                 let idx = code.add_constant(Value::String(name));
                 code.add_code(OpCode::AssignVar(idx));
             }
-            Node::Unary(_) | Node::Binary(..) => {
+            Node::Unary(_) | Node::Binary(..) | Node::MacroCall(..) => {
                 compile_expression(&node, &mut code);
             }
             Node::Return(value) => {
                 compile_expression(&value, &mut code);
-                code.add_code(OpCode::Return)
+                code.add_code(OpCode::Return);
             }
+            _ => {}
         }
     }
 
