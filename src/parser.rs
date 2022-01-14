@@ -13,6 +13,8 @@ pub enum Node {
     Binary(Box<Node>, Box<Node>, String),
     VariableInit(String, Box<Node>),
     Return(Box<Node>),
+    FunctionCall(String, Vec<Node>),
+    MacroCall(String, Vec<Node>),
 }
 
 #[derive(Debug, Clone)]
@@ -20,13 +22,6 @@ pub struct BinaryNode {
     pub a: Node,
     pub b: Node,
     pub o: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct FunctionCall {
-    pub name: String,
-    pub args: Vec<Node>,
-    pub ismacro: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -43,7 +38,7 @@ pub struct Parser {
     pub source: Vec<String>,
     pub current: Token,
     current_idx: usize,
-    tokens_iter: Peekable<std::iter::Enumerate<std::vec::IntoIter<Token>>>,
+    tokens_iter: Peekable<std::vec::IntoIter<Token>>,
 }
 
 impl Parser {
@@ -54,7 +49,7 @@ impl Parser {
             source,
             current: Token::new(Value::None, 0, 0, 0),
             current_idx: 0,
-            tokens_iter: tokens.into_iter().enumerate().peekable(),
+            tokens_iter: tokens.into_iter().peekable(),
         }
     }
 
@@ -72,10 +67,10 @@ impl Parser {
 
     // expect a token with a certain value, gives a result telling whether the token was found or not.
     fn expect_token(&mut self, value: Value, exact: bool) -> Result<Value, ()> {
-        let token: Option<&(usize, Token)> = self.tokens_iter.peek();
+        let token: Option<&Token> = self.tokens_iter.peek();
 
         match token {
-            Some((_, token)) => {
+            Some(token) => {
                 if (!exact && discriminant(&token.value) == discriminant(&value))
                     || (exact && token.value == value)
                 {
@@ -95,14 +90,14 @@ impl Parser {
 
     // expect a token with any value from a list of values. Useful in expecting assignment operators. (*=, /=, +=, etc)
     fn expect_exact_tokens(&mut self, values: Vec<Value>) -> Result<Value, ()> {
-        let token: Option<(usize, Token)> = self.tokens_iter.next();
+        let token: Option<Token> = self.tokens_iter.next();
 
         for value in values {
             match token {
-                Some((idx, ref token)) => {
+                Some(ref token) => {
                     if token.value == value {
                         self.current = token.clone();
-                        self.current_idx = idx;
+                        self.current_idx += 1;
 
                         return Ok(token.value.clone());
                     }
@@ -134,14 +129,13 @@ impl Parser {
 
     // consume the next token in the tokens iterator.
     // MUST USE this as it sets a few attributes on this struct, and the parser might break otherwise.
-    fn advance(&mut self) -> Option<(usize, Token)> {
+    fn advance(&mut self) -> Option<Token> {
         let current = self.tokens_iter.next();
-        println!("{:?}", current);
-
+        
         match current.clone() {
-            Some((idx, token)) => {
+            Some(token) => {
                 self.current = token;
-                self.current_idx = idx;
+                self.current_idx += 1;
                 current
             }
             None => None,
@@ -181,7 +175,7 @@ impl Parser {
                 let option = self.advance();
 
                 match option {
-                    Some((_, current)) => match current.value {
+                    Some(current) => match current.value {
                         Value::RCurly => {
                             if bracket_stack.is_empty() {
                                 break;
@@ -207,18 +201,47 @@ impl Parser {
     }
 
     pub fn literal(&mut self) -> Node {
-        let token = self.advance();
+        match self.current.value.clone() {
+            Value::Int(_)
+            | Value::String(_)
+            | Value::FormattedString(_)
+            | Value::Identifier(_)
+            | Value::Float(_) => Node::Unary(self.current.value.clone()),
+            Value::MacroIdentifier(name) => {
+                self.expect(
+                    Value::LParen,
+                    true,
+                    "Expected opening parenthesis after macro name",
+                );
 
-        match token {
-            Some((_, token)) => match token.value {
-                Value::Int(_)
-                | Value::String(_)
-                | Value::FormattedString(_)
-                | Value::Identifier(_)
-                | Value::Float(_) => Node::Unary(token.value),
-                _ => self.raise("Unexpected token."),
-            },
-            None => self.raise("Expected value."),
+                let mut arguments: Vec<Node> = vec![];
+
+                // consume the opening parenthesis. I do not know why this works
+                // since self.expect consumes the parenthesis already
+                self.advance();
+
+                // parse the first argument
+                arguments.push(self.primary_expr());
+
+                // advance until the current token is a closing parenthesis
+                while let Err(_) = self.expect_token(Value::RParen, true) {
+                    arguments.push(self.primary_expr());
+
+                    match self.tokens_iter.peek() {
+                        Some(token) => {
+                            if token.value != Value::RParen {
+                                self.expect(Value::Comma, true, "Expected comma.");
+                            }
+                        }
+                        None => self.raise("Unexpected EOF"),
+                    }
+                }
+
+                Node::MacroCall(name.to_string(), arguments)
+            }
+            _ => {
+                self.raise("Unexpected token.")
+            }
         }
     }
 
@@ -233,7 +256,7 @@ impl Parser {
             _ => raise_internal("0024"),
         };
 
-        while operators.contains(&self.tokens_iter.peek().unwrap().1.value) {
+        while operators.contains(&self.tokens_iter.peek().unwrap().value) {
             self.advance();
             let operator = self.current.value.clone();
 
@@ -268,7 +291,7 @@ impl Parser {
 
     // main parse function
     pub fn parse(&mut self, chunk: &mut Function) {
-        while let Some((_, current)) = self.advance() {
+        while let Some(current) = self.advance() {
             match current.value {
                 Value::KeywordFn => {
                     let name = self.expect(
@@ -305,6 +328,8 @@ impl Parser {
                     let name: String = name.extract().unwrap();
 
                     self.expect_exact(vec![Value::Assign], "Expected assignment operator.");
+                    self.advance();
+
                     let expression = self.primary_expr();
                     self.expect(
                         Value::Semicolon,
@@ -325,6 +350,38 @@ impl Parser {
                     );
 
                     chunk.body.push(Node::Return(Box::new(expression)));
+                }
+                Value::MacroIdentifier(name) => {
+                    self.expect(
+                        Value::LParen,
+                        true,
+                        "Expected opening parenthesis after macro name",
+                    );
+
+                    let mut arguments: Vec<Node> = vec![];
+
+                    // consume the opening parenthesis. I do not know why this works
+                    // since self.expect consumes the parenthesis already
+                    self.advance();
+
+                    // parse the first argument
+                    arguments.push(self.primary_expr());
+
+                    // advance until the current token is a closing parenthesis
+                    while let Err(_) = self.expect_token(Value::RParen, true) {
+                        arguments.push(self.primary_expr());
+
+                        match self.tokens_iter.peek() {
+                            Some(token) => {
+                                if token.value != Value::RParen {
+                                    self.expect(Value::Comma, true, "Expected comma.");
+                                }
+                            }
+                            None => self.raise("Unexpected EOF"),
+                        }
+                    }
+                    
+                    chunk.body.push(Node::MacroCall(name, arguments));
                 }
                 _ => {}
             }
