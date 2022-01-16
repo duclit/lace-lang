@@ -175,7 +175,7 @@ impl Parser {
                 }
             },
             _ => {
-                self.raise("Expected opening bracket");
+                self.raise("Expected '{'.");
             }
         }
 
@@ -187,7 +187,6 @@ impl Parser {
             Value::Int(_)
             | Value::String(_)
             | Value::FormattedString(_)
-            | Value::Identifier(_)
             | Value::Float(_) => {
                 let val = Node::Unary(self.current.value.clone());
                 self.advance();
@@ -201,7 +200,6 @@ impl Parser {
                 );
 
                 let mut arguments: Vec<Node> = vec![];
-
                 self.advance();
 
                 match self.expect_token(Value::RParen, true) {
@@ -221,10 +219,38 @@ impl Parser {
                 }
 
                 self.advance();
-
                 Node::MacroCall(name.to_string(), arguments)
             }
-            _ => self.raise("Unexpected token."),
+            Value::Identifier(name) => match self.advance() {
+                Some(token) => match token.value {
+                    Value::LParen => {
+                        let mut arguments: Vec<Node> = vec![];
+                        self.advance();
+        
+                        match self.expect_token(Value::RParen, true) {
+                            Ok(_) => {}
+                            Err(_) => {
+                                arguments.push(self.primary_expr());
+        
+                                while let Ok(_) = self.expect_token(Value::Comma, true) {
+                                    self.advance();
+                                    arguments.push(self.primary_expr());
+                                }
+                            }
+                        }
+        
+                        if self.current.value != Value::RParen {
+                            self.raise("Expected ')' after function call.")
+                        }
+        
+                        self.advance();
+                        Node::FunctionCall(name.to_string(), arguments)
+                    }
+                    _ => Node::Unary(token.value)
+                }
+                None => self.raise("Expected expression.")
+            },
+            _ => self.raise("Unexpected token "),
         }
     }
 
