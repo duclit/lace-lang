@@ -18,13 +18,6 @@ impl Context {
     }
 }
 
-// base context, contains data required to build Context
-pub struct BaseContext {
-    pub tokens: Vec<Token>,
-    pub base: usize,
-    pub source: Vec<String>,
-}
-
 pub fn raise(err: &str, ctx: Context) -> ! {
     let line_idx = ctx.idx + 1;
     let empty = " ".repeat(format!("{}", line_idx).len());
@@ -35,6 +28,22 @@ pub fn raise(err: &str, ctx: Context) -> ! {
     match ctx.pointer {
         Option::None => println!("{} |", empty),
         Option::Some(ptr) => println!("{} | {}^", empty, " ".repeat(ptr)),
+    }
+
+    println!("Error: {}", err);
+    exit(0);
+}
+
+pub fn raise_rng(err: &str, ctx: Context, len: usize) -> ! {
+    let line_idx = ctx.idx + 1;
+    let empty = " ".repeat(format!("{}", line_idx).len());
+
+    println!("{} |", empty);
+    println!("{} | {}", line_idx, ctx.line.trim_start().to_string());
+
+    match ctx.pointer {
+        Option::None => println!("{} |", empty),
+        Option::Some(ptr) => println!("{} | {}{}", empty, " ".repeat(ptr), "^".repeat(len)),
     }
 
     println!("Error: {}", err);
