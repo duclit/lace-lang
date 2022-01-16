@@ -1,4 +1,4 @@
-use crate::error::{raise, raise_internal, Context};
+use crate::error::{raise_internal, raise_rng, Context};
 use crate::lexer::{Extract, Token, Value};
 use crate::vm::opcode;
 use crate::vm::opcode::Type;
@@ -55,56 +55,34 @@ impl Parser {
 
     // raise an error.
     fn raise(&self, error: &str) -> ! {
-        raise(
+        raise_rng(
             error,
             Context::new(
                 self.current.line,
                 &self.source,
                 Option::Some(self.current.start),
             ),
+            self.current.end - self.current.start,
         );
     }
 
     // expect a token with a certain value, gives a result telling whether the token was found or not.
     fn expect_token(&mut self, value: Value, exact: bool) -> Result<Value, ()> {
-        let token: Option<&Token> = self.tokens_iter.peek();
-
-        match token {
-            Some(token) => {
-                if (!exact && discriminant(&token.value) == discriminant(&value))
-                    || (exact && token.value == value)
-                {
-                    let res = Ok(token.value.clone());
-                    self.advance();
-
-                    return res;
-                } else {
-                    return Err(());
-                }
-            }
-            None => {
-                return Err(());
-            }
+        if (!exact && discriminant(&self.current.value) == discriminant(&value))
+            || (exact && self.current.value == value)
+        {
+            let res = Ok(self.current.value.clone());
+            return res;
+        } else {
+            return Err(());
         }
     }
 
     // expect a token with any value from a list of values. Useful in expecting assignment operators. (*=, /=, +=, etc)
     fn expect_exact_tokens(&mut self, values: Vec<Value>) -> Result<Value, ()> {
-        let token: Option<Token> = self.tokens_iter.next();
-
         for value in values {
-            match token {
-                Some(ref token) => {
-                    if token.value == value {
-                        self.current = token.clone();
-                        self.current_idx += 1;
-
-                        return Ok(token.value.clone());
-                    }
-                }
-                None => {
-                    return Err(());
-                }
+            if self.current.value == value {
+                return Ok(self.current.value.clone());
             }
         }
 
@@ -113,6 +91,8 @@ impl Parser {
 
     // same as expect_exact_tokens, but raises an error if the token is not found.
     fn expect_exact(&mut self, values: Vec<Value>, err: &str) -> Value {
+        self.advance();
+
         match self.expect_exact_tokens(values) {
             Ok(value) => value,
             Err(_) => self.raise(err),
@@ -121,6 +101,8 @@ impl Parser {
 
     // same as expect_token, but raises an error if the token is not found.
     fn expect(&mut self, value: Value, exact: bool, err: &str) -> Value {
+        self.advance();
+
         match self.expect_token(value, exact) {
             Ok(value) => value,
             Err(_) => self.raise(err),
@@ -131,7 +113,7 @@ impl Parser {
     // MUST USE this as it sets a few attributes on this struct, and the parser might break otherwise.
     fn advance(&mut self) -> Option<Token> {
         let current = self.tokens_iter.next();
-        
+
         match current.clone() {
             Some(token) => {
                 self.current = token;
@@ -206,7 +188,11 @@ impl Parser {
             | Value::String(_)
             | Value::FormattedString(_)
             | Value::Identifier(_)
-            | Value::Float(_) => Node::Unary(self.current.value.clone()),
+            | Value::Float(_) => {
+                let val = Node::Unary(self.current.value.clone());
+                self.advance();
+                val
+            }
             Value::MacroIdentifier(name) => {
                 self.expect(
                     Value::LParen,
@@ -216,32 +202,29 @@ impl Parser {
 
                 let mut arguments: Vec<Node> = vec![];
 
-                // consume the opening parenthesis. I do not know why this works
-                // since self.expect consumes the parenthesis already
                 self.advance();
 
-                // parse the first argument
-                arguments.push(self.primary_expr());
+                match self.expect_token(Value::RParen, true) {
+                    Ok(_) => {}
+                    Err(_) => {
+                        arguments.push(self.primary_expr());
 
-                // advance until the current token is a closing parenthesis
-                while let Err(_) = self.expect_token(Value::RParen, true) {
-                    arguments.push(self.primary_expr());
-
-                    match self.tokens_iter.peek() {
-                        Some(token) => {
-                            if token.value != Value::RParen {
-                                self.expect(Value::Comma, true, "Expected comma.");
-                            }
+                        while let Ok(_) = self.expect_token(Value::Comma, true) {
+                            self.advance();
+                            arguments.push(self.primary_expr());
                         }
-                        None => self.raise("Unexpected EOF"),
                     }
                 }
 
+                if self.current.value != Value::RParen {
+                    self.raise("Expected ')' after function call.")
+                }
+
+                self.advance();
+
                 Node::MacroCall(name.to_string(), arguments)
             }
-            _ => {
-                self.raise("Unexpected token.")
-            }
+            _ => self.raise("Unexpected token."),
         }
     }
 
@@ -358,29 +341,33 @@ impl Parser {
                         "Expected opening parenthesis after macro name",
                     );
 
-                    let mut arguments: Vec<Node> = vec![];
-
-                    // consume the opening parenthesis. I do not know why this works
-                    // since self.expect consumes the parenthesis already
+                    // consume the opening parenthesis
                     self.advance();
 
-                    // parse the first argument
-                    arguments.push(self.primary_expr());
+                    let mut arguments: Vec<Node> = vec![];
 
-                    // advance until the current token is a closing parenthesis
-                    while let Err(_) = self.expect_token(Value::RParen, true) {
-                        arguments.push(self.primary_expr());
+                    match self.expect_token(Value::RParen, true) {
+                        Ok(val) => {}
+                        Err(_) => {
+                            arguments.push(self.primary_expr());
 
-                        match self.tokens_iter.peek() {
-                            Some(token) => {
-                                if token.value != Value::RParen {
-                                    self.expect(Value::Comma, true, "Expected comma.");
-                                }
+                            while let Ok(_) = self.expect_token(Value::Comma, true) {
+                                self.advance();
+                                arguments.push(self.primary_expr());
                             }
-                            None => self.raise("Unexpected EOF"),
                         }
                     }
-                    
+
+                    if self.current.value != Value::RParen {
+                        self.raise("Expected ')' after function call.")
+                    }
+
+                    self.expect(
+                        Value::Semicolon,
+                        true,
+                        "Unexpected token. Perhaps you forgot a semicolon?",
+                    );
+
                     chunk.body.push(Node::MacroCall(name, arguments));
                 }
                 _ => {}
