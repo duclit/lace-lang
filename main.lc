@@ -1,3 +1,4 @@
-fn new_function() {
-    let a = 2;
+fn raise(error: string) {
+    writeln!(error);
+    exit!();
 }
