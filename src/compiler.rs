@@ -92,7 +92,13 @@ pub fn compile(main: Function) -> CodeObject {
 
     for node in main.body {
         match node {
-            Node::VariableInit(name, value) => {
+            Node::VariableInit(name, value, _) => {
+                compile_expression(&value, &mut code);
+
+                let idx = code.add_constant(Value::String(name));
+                code.add_code(OpCode::AssignVar(idx));
+            }
+            Node::VariableAssign(name, value) => {
                 compile_expression(&value, &mut code);
 
                 let idx = code.add_constant(Value::String(name));
