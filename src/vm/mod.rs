@@ -1,12 +1,10 @@
 pub mod arithmetic;
-pub mod common;
 pub mod r#macro;
 pub mod opcode;
-
-use std::collections::HashMap;
-
 use crate::error::{raise_internal, Data};
 use crate::vm::opcode::*;
+
+use std::collections::HashMap;
 
 pub fn run(
     function: CodeObject,
@@ -27,9 +25,10 @@ pub fn run(
     let mut stack: Vec<Value> = vec![];
     let mut variables: HashMap<&String, Value> = variables;
 
-    let mut macros: HashMap<&str, fn(Vec<Value>) -> Value> = HashMap::new();
-
-    macros.insert("writeln", r#macro::writeln);
+    let macrow: HashMap<String, fn(Vec<opcode::Value>) -> opcode::Value> = HashMap::from([
+        (String::from("writeln"), r#macro::lace_writeln as _),
+        (String::from("exit"), r#macro::lace_exit as _),
+    ]);
 
     for opcode in function.code {
         match opcode {
@@ -53,7 +52,7 @@ pub fn run(
                 0 => stack.push(Value::None),
                 1 => stack.push(Value::Bool(true)),
                 2 => stack.push(Value::Bool(false)),
-                _ => raise_internal("0015"),
+                _ => raise_internal("05"),
             },
             OpCode::Add
             | OpCode::Sub
@@ -84,16 +83,16 @@ pub fn run(
 
                     arguments.reverse();
 
-                    if !macros.contains_key(name.as_str()) {
+                    if !macrow.contains_key(name.as_str()) {
                         Data::new(0, function.file.clone())
                             .raise(format!("Macro {} not found.", name))
                     }
-                    
+
                     // get the function from the macros hashmap and call it
-                    let value = macros.get(name.as_str()).unwrap()(arguments);
+                    let value = macrow.get(name.as_str()).unwrap()(arguments);
                     stack.push(value);
                 } else {
-                    raise_internal("0009")
+                    raise_internal("06")
                 }
             }
             OpCode::CallFunction(idx, arg_len) => {
@@ -133,13 +132,13 @@ pub fn run(
                     let mut args_map: HashMap<&String, Value> = HashMap::new();
 
                     for (name, value) in func.parameters.iter().zip(arguments) {
-                        args_map.insert(name, value);
+                        args_map.insert(&name.0, value);
                     }
 
                     let res = run(func.clone(), args_map, Option::Some(global_functions));
                     stack.push(res);
                 } else {
-                    raise_internal("0016")
+                    raise_internal("07")
                 }
             }
             _ => {}
