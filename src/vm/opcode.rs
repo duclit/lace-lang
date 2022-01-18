@@ -54,10 +54,11 @@ pub enum Type {
     Float,
     Bool,
     None,
+    Any,
 }
 
 impl Value {
-    fn is_truthy(&self) -> bool {
+    fn _is_truthy(&self) -> bool {
         match self {
             Value::String(str) => str.is_empty(),
             Value::Integer(int) => int < &1,
@@ -72,7 +73,7 @@ impl Value {
 pub struct CodeObject {
     pub code: Vec<OpCode>,
     pub constants: Vec<Value>,
-    pub parameters: Vec<String>,
+    pub parameters: Vec<(String, bool, Type)>,
     pub functions: HashMap<String, CodeObject>,
     pub file: String,
 }
