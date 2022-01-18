@@ -1,6 +1,6 @@
-use std::{iter::Peekable, str::Chars};
+use std::iter::Peekable;
 
-use crate::error::{raise, raise_internal, Context};
+use crate::error::{raise, Context};
 use owned_chars;
 use regex;
 
@@ -13,6 +13,8 @@ pub enum Value {
     KeywordFn,
     KeywordReturn,
     KeywordStruct,
+    KeywordPub,
+    KeywordMut,
 
     TypeInt,
     TypeFloat,
@@ -31,6 +33,7 @@ pub enum Value {
     LSquare,
     RSquare,
 
+    Comma,
     Assign,
     Bang,
 
@@ -46,6 +49,15 @@ pub enum Value {
     OpMul,
     OpDiv,
     OpPow,
+    OpMod,
+    OpEq,
+    OpUnEq,
+    OpMore,
+    OpLess,
+    OpMoreEq,
+    OpLessEq,
+    OpLShift,
+    OpRShift,
 }
 
 pub type Identifier = String;
@@ -183,15 +195,26 @@ impl Tokenizer {
             "let" => self.add_token(Value::KeywordLet, start_i),
             "fn" => self.add_token(Value::KeywordFn, start_i),
             "return" => self.add_token(Value::KeywordReturn, start_i),
+            "pub" => self.add_token(Value::KeywordPub, start_i),
+            "mut" => self.add_token(Value::KeywordMut, start_i),
             "none" => self.add_token(Value::None, start_i),
             "true" => self.add_token(Value::True, start_i),
             "false" => self.add_token(Value::False, start_i),
             "float" => self.add_token(Value::TypeFloat, start_i),
             "int" => self.add_token(Value::TypeInt, start_i),
             "string" => self.add_token(Value::TypeString, start_i),
-            "struct" => self.add_token(Value::KeywordStruct, start_i),            
+            "struct" => self.add_token(Value::KeywordStruct, start_i),
             "bool" => self.add_token(Value::TypeBool, start_i),
-            _ => self.add_token(Value::Identifier(string), start_i),
+            _ => {
+                if let Some(ch) = self.source_iter.peek() {
+                    if *ch == '!' {
+                        self.advance();
+                        self.add_token(Value::MacroIdentifier(string), start_i);
+                    } else {
+                        self.add_token(Value::Identifier(string), start_i)
+                    }
+                }
+            }
         }
     }
 
@@ -237,19 +260,25 @@ impl Tokenizer {
                 self.identifier();
             } else {
                 match ch {
-                    '+' => self.add_token(Value::OpAdd, self.current_i),
-                    '-' => self.add_token(Value::OpSub, self.current_i),
-                    '*' => self.add_token(Value::OpMul, self.current_i),
-                    '/' => self.add_token(Value::OpDiv, self.current_i),
-                    '^' => self.add_token(Value::OpPow, self.current_i),
-                    '{' => self.add_token(Value::LCurly, self.current_i),
-                    '}' => self.add_token(Value::RCurly, self.current_i),
-                    '(' => self.add_token(Value::LParen, self.current_i),
-                    ')' => self.add_token(Value::RParen, self.current_i),
-                    ':' => self.add_token(Value::Colon, self.current_i),
-                    '=' => self.add_token(Value::Assign, self.current_i),
-                    '!' => self.add_token(Value::Bang, self.current_i),
-                    ';' => self.add_token(Value::Semicolon, self.current_i),
+                    '+' => self.add_token(Value::OpAdd, self.current_i - 1),
+                    '-' => self.add_token(Value::OpSub, self.current_i - 1),
+                    '*' => self.add_token(Value::OpMul, self.current_i - 1),
+                    '/' => self.add_token(Value::OpDiv, self.current_i - 1),
+                    '^' => self.add_token(Value::OpPow, self.current_i - 1),
+                    '&' => self.add_token(Value::OpMod, self.current_i - 1),
+                    '>' => self.add_token(Value::OpMore, self.current_i - 1),
+                    '<' => self.add_token(Value::OpLess, self.current_i - 1),
+                    '{' => self.add_token(Value::LCurly, self.current_i - 1),
+                    '}' => self.add_token(Value::RCurly, self.current_i - 1),
+                    '(' => self.add_token(Value::LParen, self.current_i - 1),
+                    ')' => self.add_token(Value::RParen, self.current_i - 1),
+                    '[' => self.add_token(Value::LSquare, self.current_i - 1),
+                    ']' => self.add_token(Value::RSquare, self.current_i - 1),
+                    ':' => self.add_token(Value::Colon, self.current_i - 1),
+                    '=' => self.add_token(Value::Assign, self.current_i - 1),
+                    '!' => self.add_token(Value::Bang, self.current_i - 1),
+                    ';' => self.add_token(Value::Semicolon, self.current_i - 1),
+                    ',' => self.add_token(Value::Comma, self.current_i - 1),
                     _ => {
                         if !whitespace.is_match(ch.to_string().as_str()) {
                             self.raise(format!("Unknown character '{}'", ch).as_str())
