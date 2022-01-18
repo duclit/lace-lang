@@ -1,6 +1,5 @@
 use crate::error::{raise_internal, raise_rng, Context};
 use crate::lexer::{Extract, Token, Value};
-use crate::vm::opcode;
 use crate::vm::opcode::Type;
 
 use std::collections::HashMap;
@@ -124,6 +123,23 @@ impl Parser {
         }
     }
 
+    fn consume_token(&mut self, value: Value) -> Result<(), ()> {
+        if self.current.value != value {
+            return Err(());
+        }
+
+        return Ok(());
+    }
+
+    fn consume(&mut self, value: Value, err: &str) {
+        match self.consume_token(value) {
+            Ok(_) => {
+                self.advance();
+            }
+            Err(_) => self.raise(err),
+        }
+    }
+
     // convert a token value representing an operator to a string.
     fn operator_to_string(&mut self, operator: Value) -> String {
         match operator {
@@ -132,7 +148,7 @@ impl Parser {
             Value::OpPow => "^".to_string(),
             Value::OpAdd => "+".to_string(),
             Value::OpSub => "-".to_string(),
-            _ => raise_internal("0023"),
+            _ => raise_internal("00"),
         }
     }
 
@@ -143,7 +159,7 @@ impl Parser {
             Value::TypeFloat => Type::Float,
             Value::TypeInt => Type::Integer,
             Value::TypeString => Type::String,
-            _ => raise_internal("0019"),
+            _ => raise_internal("01"),
         }
     }
 
@@ -184,13 +200,10 @@ impl Parser {
 
     pub fn literal(&mut self) -> Node {
         match self.current.value.clone() {
-            Value::Int(_)
-            | Value::String(_)
-            | Value::FormattedString(_)
-            | Value::Float(_) => {
+            Value::Int(_) | Value::String(_) | Value::FormattedString(_) | Value::Float(_) => {
                 let val = Node::Unary(self.current.value.clone());
-                self.advance();
-                val
+                println!("Scanning literal, current is: {:?}", self.current);
+                return val;
             }
             Value::MacroIdentifier(name) => {
                 self.expect(
@@ -205,52 +218,49 @@ impl Parser {
                 match self.expect_token(Value::RParen, true) {
                     Ok(_) => {}
                     Err(_) => {
-                        arguments.push(self.primary_expr());
+                        arguments.push(self.expression());
 
                         while let Ok(_) = self.expect_token(Value::Comma, true) {
                             self.advance();
-                            arguments.push(self.primary_expr());
+                            arguments.push(self.expression());
                         }
                     }
                 }
 
-                if self.current.value != Value::RParen {
-                    self.raise("Expected ')' after function call.")
-                }
-
+                self.consume(Value::RParen, "Expected ')' after function call.");
                 self.advance();
+
                 Node::MacroCall(name.to_string(), arguments)
             }
-            Value::Identifier(name) => match self.advance() {
+            Value::Identifier(name) => match self.tokens_iter.peek() {
                 Some(token) => match token.value {
                     Value::LParen => {
+                        self.advance();
                         let mut arguments: Vec<Node> = vec![];
                         self.advance();
-        
+
                         match self.expect_token(Value::RParen, true) {
                             Ok(_) => {}
                             Err(_) => {
-                                arguments.push(self.primary_expr());
-        
+                                arguments.push(self.expression());
+
                                 while let Ok(_) = self.expect_token(Value::Comma, true) {
                                     self.advance();
-                                    arguments.push(self.primary_expr());
+                                    arguments.push(self.expression());
                                 }
                             }
                         }
-        
-                        if self.current.value != Value::RParen {
-                            self.raise("Expected ')' after function call.")
-                        }
-        
+
+                        self.consume(Value::RParen, "Expected ')' after function call.");
                         self.advance();
+
                         Node::FunctionCall(name.to_string(), arguments)
                     }
-                    _ => Node::Unary(token.value)
-                }
-                None => self.raise("Expected expression.")
+                    _ => {let val = Node::Unary(self.current.value.clone()); self.advance(); val},
+                },
+                None => self.raise("Expected expression."),
             },
-            _ => self.raise("Unexpected token "),
+            _ => self.raise("Unexpected token."),
         }
     }
 
@@ -265,9 +275,9 @@ impl Parser {
             _ => raise_internal("0024"),
         };
 
-        while operators.contains(&self.tokens_iter.peek().unwrap().value) {
-            self.advance();
+        while operators.contains(&self.current.value) {
             let operator = self.current.value.clone();
+            self.advance();
 
             let right = match builder {
                 "literal" => self.literal(),
@@ -294,7 +304,8 @@ impl Parser {
         self.binary_expression("multiplicative", vec![Value::OpAdd, Value::OpSub])
     }
 
-    pub fn primary_expr(&mut self) -> Node {
+    #[inline(always)]
+    pub fn expression(&mut self) -> Node {
         self.additive_expr()
     }
 
@@ -339,7 +350,10 @@ impl Parser {
                     self.expect_exact(vec![Value::Assign], "Expected assignment operator.");
                     self.advance();
 
-                    let expression = self.primary_expr();
+                    let expression = self.expression();
+
+                    println!("{:?}", self.current);
+
                     self.expect(
                         Value::Semicolon,
                         true,
@@ -351,7 +365,8 @@ impl Parser {
                         .push(Node::VariableInit(name, Box::new(expression)));
                 }
                 Value::KeywordReturn => {
-                    let expression = self.primary_expr();
+                    let expression = self.expression();
+
                     self.expect(
                         Value::Semicolon,
                         true,
@@ -360,42 +375,12 @@ impl Parser {
 
                     chunk.body.push(Node::Return(Box::new(expression)));
                 }
-                Value::MacroIdentifier(name) => {
-                    self.expect(
-                        Value::LParen,
-                        true,
-                        "Expected opening parenthesis after macro name",
-                    );
-
-                    // consume the opening parenthesis
-                    self.advance();
-
-                    let mut arguments: Vec<Node> = vec![];
-
-                    match self.expect_token(Value::RParen, true) {
-                        Ok(val) => {}
-                        Err(_) => {
-                            arguments.push(self.primary_expr());
-
-                            while let Ok(_) = self.expect_token(Value::Comma, true) {
-                                self.advance();
-                                arguments.push(self.primary_expr());
-                            }
-                        }
-                    }
-
-                    if self.current.value != Value::RParen {
-                        self.raise("Expected ')' after function call.")
-                    }
-
-                    self.expect(
-                        Value::Semicolon,
-                        true,
-                        "Unexpected token. Perhaps you forgot a semicolon?",
-                    );
-
-                    chunk.body.push(Node::MacroCall(name, arguments));
-                }
+                Value::MacroIdentifier(_)
+                | Value::Identifier(_)
+                | Value::Int(_)
+                | Value::Float(_)
+                | Value::String(_)
+                | Value::FormattedString(_) => chunk.body.push(self.expression()),
                 _ => {}
             }
         }
