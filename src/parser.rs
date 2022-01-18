@@ -27,7 +27,7 @@ pub struct BinaryNode {
 #[derive(Debug, Clone)]
 pub struct Function {
     pub name: String,
-    pub args: Vec<String>,
+    pub args: Vec<(String, bool, Type)>,
     pub body: Vec<Node>,
     pub file: String,
     pub local_functions: HashMap<String, Function>,
@@ -327,12 +327,97 @@ impl Parser {
 
                     let name: String = name.extract().unwrap();
 
-                    self.expect(Value::LCurly, true, "Expected opening brackets.");
+                    // name of the arguments, whether the argument is mutable, type of the argument
+                    let mut arguments: Vec<(String, bool, Type)> = Vec::new();
+
+                    self.expect(Value::LParen, true, "Expected '(' after function name.");
+                    self.advance();
+
+                    while &self.current.value != &Value::RParen {
+                        let mut argument: (String, bool, Type) = (String::new(), false, Type::Any);
+
+                        match &self.current.value {
+                            Value::KeywordMut => {
+                                self.expect(Value::Identifier(String::new()), false, "Expected identifier.");
+                                let name = self.current.value.clone().extract().unwrap();
+
+                                argument.0 = name;
+                                argument.1 = true;
+
+                                match self.advance() {
+                                    Some(token) => match token.value {
+                                        Value::Colon => {
+                                            self.advance();
+
+                                            let tipe = match self.expect_exact_tokens(vec![Value::TypeInt, Value::TypeBool, Value::TypeFloat, Value::TypeString]) {
+                                                Result::Ok(val) => val,
+                                                Result::Err(_) => self.raise("Expected type.")
+                                            };
+
+                                            match tipe {
+                                                Value::TypeInt => {argument.2 = Type::Integer},
+                                                Value::TypeBool => {argument.2 = Type::Bool},
+                                                Value::TypeFloat => {argument.2 = Type::Float},
+                                                Value::TypeString => {argument.2 = Type::String},
+                                                _ => {}
+                                            }
+
+                                            self.advance();
+                                        },
+                                        Value::Comma => {self.advance();},
+                                        Value::RParen => {}
+                                        _ => self.raise("Expected comma.")
+                                    },
+                                    None => {}
+                                }
+                            }
+                            Value::Identifier(name) => {
+                                argument.0 = name.to_string();
+                                argument.1 = false;
+
+                                match self.advance() {
+                                    Some(token) => match token.value {
+                                        Value::Colon => {
+                                            self.advance();
+
+                                            let tipe = match self.expect_exact_tokens(vec![Value::TypeInt, Value::TypeBool, Value::TypeFloat, Value::TypeString]) {
+                                                Result::Ok(val) => val,
+                                                Result::Err(_) => self.raise("Expected type.")
+                                            };
+
+                                            match tipe {
+                                                Value::TypeInt => {argument.2 = Type::Integer},
+                                                Value::TypeBool => {argument.2 = Type::Bool},
+                                                Value::TypeFloat => {argument.2 = Type::Float},
+                                                Value::TypeString => {argument.2 = Type::String},
+                                                _ => {}
+                                            }
+
+                                            self.advance();
+                                        },
+                                        Value::Comma => {self.advance();},
+                                        Value::RParen => {}
+                                        _ => self.raise("Expected comma.")
+                                    },
+                                    None => {}
+                                }
+                            }
+                            _ => self.raise("Unexpected token. Expected either `mut` or identifier.")
+                        }
+
+                        arguments.push(argument);
+                    }
+
+                    self.expect(
+                        Value::LCurly,
+                        true,
+                        "Expected '{' after function definition.",
+                    );
                     let block: Vec<Token> = self.get_block();
 
                     let mut function: Function = Function {
                         name: name.clone(),
-                        args: vec![],
+                        args: arguments,
                         body: vec![],
                         file: String::from("main.lc"),
                         local_functions: HashMap::new(),
@@ -345,18 +430,20 @@ impl Parser {
                 }
                 Value::KeywordLet => {
                     self.advance();
-                    
+
                     let mutable = match self.expect_token(Value::KeywordMut, true) {
-                        Ok(_) => {self.advance(); true},
+                        Ok(_) => {
+                            self.advance();
+                            true
+                        }
                         _ => false,
                     };
 
-                    let name =
-                        self.expect_token(Value::Identifier(String::new()), false);
+                    let name = self.expect_token(Value::Identifier(String::new()), false);
 
                     let name: String = match name {
                         Ok(val) => val.extract().unwrap(),
-                        Err(_) => self.raise("Expected identifier.")
+                        Err(_) => self.raise("Expected identifier."),
                     };
 
                     self.expect_exact(vec![Value::Assign], "Expected assignment operator.");
@@ -408,6 +495,6 @@ impl Parser {
             }
         }
 
-        //println!("{:?}", chunk.body); // for debugging
+        println!("{:?}", chunk.body); // for debugging
     }
 }
