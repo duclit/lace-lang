@@ -203,6 +203,7 @@ impl Parser {
             Value::Int(_) | Value::String(_) | Value::FormattedString(_) | Value::Float(_) => {
                 let val = Node::Unary(self.current.value.clone());
                 println!("Scanning literal, current is: {:?}", self.current);
+                self.advance();
                 return val;
             }
             Value::MacroIdentifier(name) => {
@@ -220,7 +221,7 @@ impl Parser {
                     Err(_) => {
                         arguments.push(self.expression());
 
-                        while let Ok(_) = self.expect_token(Value::Comma, true) {
+                        while let Ok(_) = self.consume_token(Value::Comma) {
                             self.advance();
                             arguments.push(self.expression());
                         }
@@ -243,8 +244,8 @@ impl Parser {
                             Ok(_) => {}
                             Err(_) => {
                                 arguments.push(self.expression());
-
-                                while let Ok(_) = self.expect_token(Value::Comma, true) {
+        
+                                while let Ok(_) = self.consume_token(Value::Comma) {
                                     self.advance();
                                     arguments.push(self.expression());
                                 }
