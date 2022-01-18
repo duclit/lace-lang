@@ -338,7 +338,11 @@ impl Parser {
 
                         match &self.current.value {
                             Value::KeywordMut => {
-                                self.expect(Value::Identifier(String::new()), false, "Expected identifier.");
+                                self.expect(
+                                    Value::Identifier(String::new()),
+                                    false,
+                                    "Expected identifier.",
+                                );
                                 let name = self.current.value.clone().extract().unwrap();
 
                                 argument.0 = name;
@@ -349,24 +353,31 @@ impl Parser {
                                         Value::Colon => {
                                             self.advance();
 
-                                            let tipe = match self.expect_exact_tokens(vec![Value::TypeInt, Value::TypeBool, Value::TypeFloat, Value::TypeString]) {
+                                            let tipe = match self.expect_exact_tokens(vec![
+                                                Value::TypeInt,
+                                                Value::TypeBool,
+                                                Value::TypeFloat,
+                                                Value::TypeString,
+                                            ]) {
                                                 Result::Ok(val) => val,
-                                                Result::Err(_) => self.raise("Expected type.")
+                                                Result::Err(_) => self.raise("Expected type."),
                                             };
 
                                             match tipe {
-                                                Value::TypeInt => {argument.2 = Type::Integer},
-                                                Value::TypeBool => {argument.2 = Type::Bool},
-                                                Value::TypeFloat => {argument.2 = Type::Float},
-                                                Value::TypeString => {argument.2 = Type::String},
+                                                Value::TypeInt => argument.2 = Type::Integer,
+                                                Value::TypeBool => argument.2 = Type::Bool,
+                                                Value::TypeFloat => argument.2 = Type::Float,
+                                                Value::TypeString => argument.2 = Type::String,
                                                 _ => {}
                                             }
 
                                             self.advance();
-                                        },
-                                        Value::Comma => {self.advance();},
+                                        }
+                                        Value::Comma => {
+                                            self.advance();
+                                        }
                                         Value::RParen => {}
-                                        _ => self.raise("Expected comma.")
+                                        _ => self.raise("Expected comma."),
                                     },
                                     None => {}
                                 }
@@ -380,29 +391,38 @@ impl Parser {
                                         Value::Colon => {
                                             self.advance();
 
-                                            let tipe = match self.expect_exact_tokens(vec![Value::TypeInt, Value::TypeBool, Value::TypeFloat, Value::TypeString]) {
+                                            let tipe = match self.expect_exact_tokens(vec![
+                                                Value::TypeInt,
+                                                Value::TypeBool,
+                                                Value::TypeFloat,
+                                                Value::TypeString,
+                                            ]) {
                                                 Result::Ok(val) => val,
-                                                Result::Err(_) => self.raise("Expected type.")
+                                                Result::Err(_) => self.raise("Expected type."),
                                             };
 
                                             match tipe {
-                                                Value::TypeInt => {argument.2 = Type::Integer},
-                                                Value::TypeBool => {argument.2 = Type::Bool},
-                                                Value::TypeFloat => {argument.2 = Type::Float},
-                                                Value::TypeString => {argument.2 = Type::String},
+                                                Value::TypeInt => argument.2 = Type::Integer,
+                                                Value::TypeBool => argument.2 = Type::Bool,
+                                                Value::TypeFloat => argument.2 = Type::Float,
+                                                Value::TypeString => argument.2 = Type::String,
                                                 _ => {}
                                             }
 
                                             self.advance();
-                                        },
-                                        Value::Comma => {self.advance();},
+                                        }
+                                        Value::Comma => {
+                                            self.advance();
+                                        }
                                         Value::RParen => {}
-                                        _ => self.raise("Expected comma.")
+                                        _ => self.raise("Expected comma."),
                                     },
                                     None => {}
                                 }
                             }
-                            _ => self.raise("Unexpected token. Expected either `mut` or identifier.")
+                            _ => {
+                                self.raise("Unexpected token. Expected either `mut` or identifier.")
+                            }
                         }
 
                         arguments.push(argument);
