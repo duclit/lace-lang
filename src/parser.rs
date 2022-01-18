@@ -10,7 +10,8 @@ use std::mem::discriminant;
 pub enum Node {
     Unary(Value),
     Binary(Box<Node>, Box<Node>, String),
-    VariableInit(String, Box<Node>),
+    VariableInit(String, Box<Node>, bool),
+    VariableAssign(String, Box<Node>),
     Return(Box<Node>),
     FunctionCall(String, Vec<Node>),
     MacroCall(String, Vec<Node>),
@@ -131,10 +132,12 @@ impl Parser {
         return Ok(());
     }
 
-    fn consume(&mut self, value: Value, err: &str) {
+    fn consume(&mut self, value: Value, err: &str) -> Value {
         match self.consume_token(value) {
             Ok(_) => {
+                let val = self.current.value.clone();
                 self.advance();
+                val
             }
             Err(_) => self.raise(err),
         }
@@ -202,7 +205,6 @@ impl Parser {
         match self.current.value.clone() {
             Value::Int(_) | Value::String(_) | Value::FormattedString(_) | Value::Float(_) => {
                 let val = Node::Unary(self.current.value.clone());
-                println!("Scanning literal, current is: {:?}", self.current);
                 self.advance();
                 return val;
             }
@@ -229,7 +231,6 @@ impl Parser {
                 }
 
                 self.consume(Value::RParen, "Expected ')' after function call.");
-                self.advance();
 
                 Node::MacroCall(name.to_string(), arguments)
             }
@@ -244,7 +245,7 @@ impl Parser {
                             Ok(_) => {}
                             Err(_) => {
                                 arguments.push(self.expression());
-        
+
                                 while let Ok(_) = self.consume_token(Value::Comma) {
                                     self.advance();
                                     arguments.push(self.expression());
@@ -253,11 +254,14 @@ impl Parser {
                         }
 
                         self.consume(Value::RParen, "Expected ')' after function call.");
-                        self.advance();
 
                         Node::FunctionCall(name.to_string(), arguments)
                     }
-                    _ => {let val = Node::Unary(self.current.value.clone()); self.advance(); val},
+                    _ => {
+                        let val = Node::Unary(self.current.value.clone());
+                        self.advance();
+                        val
+                    }
                 },
                 None => self.raise("Expected expression."),
             },
@@ -340,44 +344,62 @@ impl Parser {
                     chunk.local_functions.insert(name, function);
                 }
                 Value::KeywordLet => {
-                    let name = self.expect(
-                        Value::Identifier(String::new()),
-                        false,
-                        "Expected identifier",
-                    );
+                    self.advance();
+                    
+                    let mutable = match self.expect_token(Value::KeywordMut, true) {
+                        Ok(_) => {self.advance(); true},
+                        _ => false,
+                    };
 
-                    let name: String = name.extract().unwrap();
+                    let name =
+                        self.expect_token(Value::Identifier(String::new()), false);
+
+                    let name: String = match name {
+                        Ok(val) => val.extract().unwrap(),
+                        Err(_) => self.raise("Expected identifier.")
+                    };
 
                     self.expect_exact(vec![Value::Assign], "Expected assignment operator.");
                     self.advance();
 
                     let expression = self.expression();
 
-                    println!("{:?}", self.current);
-
-                    self.expect(
+                    self.consume(
                         Value::Semicolon,
-                        true,
                         "Unexpected token. Perhaps you missed a semicolon?",
                     );
 
                     chunk
                         .body
-                        .push(Node::VariableInit(name, Box::new(expression)));
+                        .push(Node::VariableInit(name, Box::new(expression), mutable));
                 }
                 Value::KeywordReturn => {
+                    self.advance();
                     let expression = self.expression();
 
-                    self.expect(
+                    self.consume(
                         Value::Semicolon,
-                        true,
                         "Unexpected token. Perhaps you missed a semicolon?",
                     );
 
                     chunk.body.push(Node::Return(Box::new(expression)));
                 }
+                Value::Identifier(name) => {
+                    self.expect_exact(vec![Value::Assign], "Expected assignment operator.");
+                    self.advance();
+
+                    let expression = self.expression();
+
+                    self.consume(
+                        Value::Semicolon,
+                        "Unexpected token. Perhaps you missed a semicolon?",
+                    );
+
+                    chunk
+                        .body
+                        .push(Node::VariableAssign(name, Box::new(expression)));
+                }
                 Value::MacroIdentifier(_)
-                | Value::Identifier(_)
                 | Value::Int(_)
                 | Value::Float(_)
                 | Value::String(_)
@@ -386,6 +408,6 @@ impl Parser {
             }
         }
 
-        println!("{:?}", chunk.body); // for debugging
+        //println!("{:?}", chunk.body); // for debugging
     }
 }
