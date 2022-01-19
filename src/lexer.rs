@@ -58,6 +58,12 @@ pub enum Value {
     OpLessEq,
     OpLShift,
     OpRShift,
+    OpAddAssign,
+    OpSubAssign,
+    OpMulAssign,
+    OpDivAssign,
+    OpPowAssign,
+    OpModAssign,
 }
 
 pub type Identifier = String;
@@ -260,14 +266,6 @@ impl Tokenizer {
                 self.identifier();
             } else {
                 match ch {
-                    '+' => self.add_token(Value::OpAdd, self.current_i - 1),
-                    '-' => self.add_token(Value::OpSub, self.current_i - 1),
-                    '*' => self.add_token(Value::OpMul, self.current_i - 1),
-                    '/' => self.add_token(Value::OpDiv, self.current_i - 1),
-                    '^' => self.add_token(Value::OpPow, self.current_i - 1),
-                    '&' => self.add_token(Value::OpMod, self.current_i - 1),
-                    '>' => self.add_token(Value::OpMore, self.current_i - 1),
-                    '<' => self.add_token(Value::OpLess, self.current_i - 1),
                     '{' => self.add_token(Value::LCurly, self.current_i - 1),
                     '}' => self.add_token(Value::RCurly, self.current_i - 1),
                     '(' => self.add_token(Value::LParen, self.current_i - 1),
@@ -275,11 +273,36 @@ impl Tokenizer {
                     '[' => self.add_token(Value::LSquare, self.current_i - 1),
                     ']' => self.add_token(Value::RSquare, self.current_i - 1),
                     ':' => self.add_token(Value::Colon, self.current_i - 1),
-                    '=' => self.add_token(Value::Assign, self.current_i - 1),
-                    '!' => self.add_token(Value::Bang, self.current_i - 1),
                     ';' => self.add_token(Value::Semicolon, self.current_i - 1),
                     ',' => self.add_token(Value::Comma, self.current_i - 1),
                     _ => {
+                        if let Some(following) = self.source_iter.peek() {
+                            match (ch, following) {
+                                ('=', '=') => self.add_token(Value::OpEq, self.current_i),
+                                ('!', '=') => self.add_token(Value::OpUnEq, self.current_i),                                
+                                ('>', '>') => self.add_token(Value::OpRShift, self.current_i),                                
+                                ('<', '<') => self.add_token(Value::OpLShift, self.current_i),                                
+                                ('>', '=') => self.add_token(Value::OpMoreEq, self.current_i),                                                                
+                                ('<', '=') => self.add_token(Value::OpLessEq, self.current_i),   
+                                ('+', '=') => self.add_token(Value::OpAddAssign, self.current_i),                                                              
+                                ('-', '=') => self.add_token(Value::OpSubAssign, self.current_i),                                                              
+                                ('*', '=') => self.add_token(Value::OpMulAssign, self.current_i),                                                              
+                                ('/', '=') => self.add_token(Value::OpDivAssign, self.current_i),                                                              
+                                ('^', '=') => self.add_token(Value::OpPowAssign, self.current_i),                                                              
+                                ('%', '=') => self.add_token(Value::OpModAssign, self.current_i),
+                                ('>', _) => self.add_token(Value::OpMore, self.current_i),                                                                
+                                ('<', _) => self.add_token(Value::OpLess, self.current_i),                                                                
+                                ('!', _) => self.add_token(Value::Bang, self.current_i),      
+                                ('+', _) => self.add_token(Value::OpAdd, self.current_i - 1),
+                                ('-', _) => self.add_token(Value::OpSub, self.current_i - 1),
+                                ('*', _) => self.add_token(Value::OpMul, self.current_i - 1),
+                                ('/', _) => self.add_token(Value::OpDiv, self.current_i - 1),                                                          
+                                ('^', _) => self.add_token(Value::OpPow, self.current_i - 1),                                                          
+                                ('%', _) => self.add_token(Value::OpMod, self.current_i - 1),                                                          
+                                _ => {}
+                            }
+                        }
+
                         if !whitespace.is_match(ch.to_string().as_str()) {
                             self.raise(format!("Unknown character '{}'", ch).as_str())
                         }
