@@ -14,7 +14,7 @@ pub enum Node {
     Array(Vec<Node>),
     FunctionCall(String, Vec<Node>),
     MacroCall(String, Vec<Node>),
-    
+
     VariableInit(String, Box<Node>, bool),
     VariableAssign(String, Box<Node>),
     Return(Box<Node>),
@@ -95,7 +95,6 @@ impl Parser {
     // same as expect_exact_tokens, but raises an error if the token is not found.
     fn expect_exact(&mut self, values: Vec<Value>, err: &str) -> Value {
         self.advance();
-        println!("curr {:?}", self.current);
 
         match self.expect_exact_tokens(values) {
             Ok(value) => value,
@@ -282,7 +281,8 @@ impl Parser {
             },
             Value::LSquare => {
                 let mut elements: Vec<Node> = vec![];
-
+                
+                self.advance();
                 match self.expect_token(Value::RSquare, true) {
                     Ok(_) => {}
                     Err(_) => {
@@ -296,6 +296,7 @@ impl Parser {
                 }
 
                 self.consume(Value::RSquare, "Expected ']' after function call.");
+                self.advance();
 
                 Node::Array(elements)
             }
@@ -523,7 +524,6 @@ impl Parser {
                         Err(_) => self.raise("Expected identifier."),
                     };
 
-                    println!("re{:?}", self.current);
                     self.expect_exact(vec![Value::Assign], "Expected assignment operator.");
                     self.advance();
 
@@ -533,8 +533,6 @@ impl Parser {
                         Value::Semicolon,
                         "Unexpected token. Perhaps you missed a semicolon?",
                     );
-
-                    println!("self.c {:?}", self.current);
 
                     chunk
                         .body
@@ -576,8 +574,6 @@ impl Parser {
                     chunk
                         .body
                         .push(Node::VariableAssign(name, Box::new(expression)));
-
-                    println!("self.a {:?}", self.current);
                 }
                 Value::MacroIdentifier(_)
                 | Value::Int(_)
