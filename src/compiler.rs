@@ -65,6 +65,13 @@ pub fn compile_expression(tree: &Node, code: &mut CodeObject) {
                 }
             }
         },
+        Node::Array(arr) => {
+            for element in arr {
+                compile_expression(element, code);
+            }
+
+            code.add_code(OpCode::BuildList(arr.len()));
+        }
         Node::MacroCall(name, arguments) => {
             let args_len = arguments.len();
             let name_idx = code.add_constant(Value::String(name.to_string()));
