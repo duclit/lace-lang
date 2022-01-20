@@ -11,3 +11,6 @@ A hello world lace program would look like this:
 ```rs
 writeln!("Hello, world!");
 ```
+
+### About
+Lace's design is inspired by [Rust](https://www.rust-lang.org/) and [JavaScript](https://developer.mozilla.org/en-US/docs/Web/JavaScript).
