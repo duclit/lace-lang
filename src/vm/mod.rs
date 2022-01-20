@@ -76,9 +76,11 @@ pub fn run(
             OpCode::BuildList(len) => {
                 let mut values: Vec<Value> = vec![];
 
-                for _ in 1..len {
+                for _ in 0..len {
                     values.push(stack.pop().unwrap())
                 }
+
+                values.reverse();
                 stack.push(Value::Array(values))
             }
             OpCode::CallMacro(idx, arg_len) => {
