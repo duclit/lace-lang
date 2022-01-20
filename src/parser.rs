@@ -92,6 +92,7 @@ impl Parser {
     // same as expect_exact_tokens, but raises an error if the token is not found.
     fn expect_exact(&mut self, values: Vec<Value>, err: &str) -> Value {
         self.advance();
+        println!("curr {:?}", self.current);
 
         match self.expect_exact_tokens(values) {
             Ok(value) => value,
@@ -134,11 +135,7 @@ impl Parser {
 
     fn consume(&mut self, value: Value, err: &str) -> Value {
         match self.consume_token(value) {
-            Ok(_) => {
-                let val = self.current.value.clone();
-                self.advance();
-                val
-            }
+            Ok(_) => self.current.value.clone(),
             Err(_) => self.raise(err),
         }
     }
@@ -151,6 +148,14 @@ impl Parser {
             Value::OpPow => "^".to_string(),
             Value::OpAdd => "+".to_string(),
             Value::OpSub => "-".to_string(),
+            Value::OpEq => "==".to_string(),
+            Value::OpUnEq => "!=".to_string(),
+            Value::OpMore => ">".to_string(),
+            Value::OpMoreEq => ">=".to_string(),
+            Value::OpLess => "<".to_string(),
+            Value::OpLessEq => "<=".to_string(),
+            Value::OpLShift => "<<".to_string(),
+            Value::OpRShift => ">>".to_string(),
             _ => raise_internal("00"),
         }
     }
@@ -203,7 +208,13 @@ impl Parser {
 
     pub fn literal(&mut self) -> Node {
         match self.current.value.clone() {
-            Value::Int(_) | Value::String(_) | Value::FormattedString(_) | Value::Float(_) => {
+            Value::Int(_)
+            | Value::String(_)
+            | Value::FormattedString(_)
+            | Value::Float(_)
+            | Value::False
+            | Value::True
+            | Value::None => {
                 let val = Node::Unary(self.current.value.clone());
                 self.advance();
                 return val;
@@ -231,6 +242,7 @@ impl Parser {
                 }
 
                 self.consume(Value::RParen, "Expected ')' after function call.");
+                self.advance();
 
                 Node::MacroCall(name.to_string(), arguments)
             }
@@ -302,16 +314,39 @@ impl Parser {
     }
 
     pub fn multiplicative_expr(&mut self) -> Node {
-        self.binary_expression("literal", vec![Value::OpMul, Value::OpDiv, Value::OpPow])
+        self.binary_expression(
+            "literal",
+            vec![
+                Value::OpMul,
+                Value::OpDiv,
+                Value::OpPow,
+                Value::OpRShift,
+                Value::OpLShift,
+            ],
+        )
     }
 
     pub fn additive_expr(&mut self) -> Node {
         self.binary_expression("multiplicative", vec![Value::OpAdd, Value::OpSub])
     }
 
+    pub fn comparison(&mut self) -> Node {
+        self.binary_expression(
+            "additive",
+            vec![
+                Value::OpEq,
+                Value::OpUnEq,
+                Value::OpLess,
+                Value::OpMore,
+                Value::OpMoreEq,
+                Value::OpLessEq,
+            ],
+        )
+    }
+
     #[inline(always)]
     pub fn expression(&mut self) -> Node {
-        self.additive_expr()
+        self.comparison()
     }
 
     // main parse function
@@ -466,6 +501,7 @@ impl Parser {
                         Err(_) => self.raise("Expected identifier."),
                     };
 
+                    println!("re{:?}", self.current);
                     self.expect_exact(vec![Value::Assign], "Expected assignment operator.");
                     self.advance();
 
@@ -475,6 +511,8 @@ impl Parser {
                         Value::Semicolon,
                         "Unexpected token. Perhaps you missed a semicolon?",
                     );
+
+                    println!("self.c {:?}", self.current);
 
                     chunk
                         .body
@@ -492,7 +530,18 @@ impl Parser {
                     chunk.body.push(Node::Return(Box::new(expression)));
                 }
                 Value::Identifier(name) => {
-                    self.expect_exact(vec![Value::Assign], "Expected assignment operator.");
+                    self.expect_exact(
+                        vec![
+                            Value::Assign,
+                            Value::OpAddAssign,
+                            Value::OpDivAssign,
+                            Value::OpModAssign,
+                            Value::OpMulAssign,
+                            Value::OpPowAssign,
+                            Value::OpSubAssign,
+                        ],
+                        "Expected assignment operator.",
+                    );
                     self.advance();
 
                     let expression = self.expression();
@@ -505,6 +554,8 @@ impl Parser {
                     chunk
                         .body
                         .push(Node::VariableAssign(name, Box::new(expression)));
+
+                    println!("self.a {:?}", self.current);
                 }
                 Value::MacroIdentifier(_)
                 | Value::Int(_)
