@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 type ValueIdx = usize;
 type NameIdx = usize;
 type Length = usize;
+type TypeIdx = u8;
 
 #[repr(u8)]
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -18,6 +19,7 @@ pub enum OpCode {
 
     FormatString,
     BuildList(Length),
+    ConvertTo(TypeIdx),
 
     Add,
     Sub,
@@ -41,9 +43,10 @@ pub enum OpCode {
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum Value {
     String(String),
-    Integer(i64),
-    Float(f64),
+    Integer(i32),
+    Float(f32),
     Bool(bool),
+    Array(Vec<Value>),
     None,
 }
 
@@ -54,13 +57,14 @@ pub enum Type {
     Float,
     Bool,
     None,
-    Any,
+    Array,
 }
 
 impl Value {
     fn _is_truthy(&self) -> bool {
         match self {
             Value::String(str) => str.is_empty(),
+            Value::Array(arr) => arr.is_empty(),
             Value::Integer(int) => int < &1,
             Value::Float(float) => float < &1.0,
             Value::Bool(bool) => *bool,
@@ -73,7 +77,7 @@ impl Value {
 pub struct CodeObject {
     pub code: Vec<OpCode>,
     pub constants: Vec<Value>,
-    pub parameters: Vec<(String, bool, Type)>,
+    pub parameters: Vec<(String, bool)>,
     pub functions: HashMap<String, CodeObject>,
     pub file: String,
 }
