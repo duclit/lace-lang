@@ -1,6 +1,7 @@
-pub mod arithmetic;
 pub mod r#macro;
 pub mod opcode;
+pub mod value;
+
 use crate::error::{raise_internal, Data};
 use crate::vm::opcode::*;
 
@@ -45,7 +46,7 @@ pub fn run(
             OpCode::AssignVar(idx) => {
                 if let Value::String(name) = &function.constants[idx] {
                     let elem = stack.pop().unwrap();
-                    variables.insert(&name, elem);
+                    variables.insert(name, elem);
                 }
             }
             OpCode::LoadBuiltinValue(idx) => match idx {
@@ -71,7 +72,7 @@ pub fn run(
                 let a = stack.pop().unwrap();
                 let context = Data::new(usize::MAX, function.file.clone());
 
-                stack.push(arithmetic::operate(&a, &b, opcode.clone(), context));
+                stack.push(value::operation::operate(&a, &b, opcode.clone(), context));
             }
             OpCode::BuildList(len) => {
                 let mut values: Vec<Value> = vec![];
@@ -82,6 +83,11 @@ pub fn run(
 
                 values.reverse();
                 stack.push(Value::Array(values))
+            }
+            OpCode::ConvertTo(tipe) => {
+                let value = stack.pop().unwrap();
+                let context = Data::new(usize::MAX, function.file.clone());
+                stack.push(value::conversion::convert(&value, tipe, context))
             }
             OpCode::CallMacro(idx, arg_len) => {
                 if let Value::String(name) = &function.constants[idx] {
@@ -156,5 +162,5 @@ pub fn run(
     }
 
     println!("{:?}", variables);
-    return Value::None;
+    Value::None
 }
