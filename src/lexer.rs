@@ -1,8 +1,6 @@
 use std::iter::Peekable;
 
 use crate::error::{raise, Context};
-use owned_chars;
-use regex;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -13,13 +11,14 @@ pub enum Value {
     KeywordFn,
     KeywordReturn,
     KeywordStruct,
-    KeywordPub,
+    KeywordAs,
     KeywordMut,
 
     TypeInt,
     TypeFloat,
     TypeString,
     TypeBool,
+    TypeArray,
 
     Int(i32),
     Float(f32),
@@ -122,7 +121,7 @@ impl Tokenizer {
             current_i: 0,
             line_i: 0,
             tokens: vec![],
-            source_lines: source.split("\n").map(|word| word.to_string()).collect(),
+            source_lines: source.split('\n').map(|word| word.to_string()).collect(),
         }
     }
 
@@ -201,16 +200,20 @@ impl Tokenizer {
             "let" => self.add_token(Value::KeywordLet, start_i),
             "fn" => self.add_token(Value::KeywordFn, start_i),
             "return" => self.add_token(Value::KeywordReturn, start_i),
-            "pub" => self.add_token(Value::KeywordPub, start_i),
+            "as" => self.add_token(Value::KeywordAs, start_i),
             "mut" => self.add_token(Value::KeywordMut, start_i),
+            "struct" => self.add_token(Value::KeywordStruct, start_i),
+
             "none" => self.add_token(Value::None, start_i),
             "true" => self.add_token(Value::True, start_i),
             "false" => self.add_token(Value::False, start_i),
-            "float" => self.add_token(Value::TypeFloat, start_i),
-            "int" => self.add_token(Value::TypeInt, start_i),
-            "string" => self.add_token(Value::TypeString, start_i),
-            "struct" => self.add_token(Value::KeywordStruct, start_i),
-            "bool" => self.add_token(Value::TypeBool, start_i),
+
+            "Float" => self.add_token(Value::TypeFloat, start_i),
+            "Int" => self.add_token(Value::TypeInt, start_i),
+            "String" => self.add_token(Value::TypeString, start_i),
+            "Bool" => self.add_token(Value::TypeBool, start_i),
+            "Array" => self.add_token(Value::TypeArray, start_i),
+
             _ => {
                 if let Some(ch) = self.source_iter.peek() {
                     if *ch == '!' {
@@ -239,7 +242,7 @@ impl Tokenizer {
             }
         }
 
-        let count = int.matches(".").count();
+        let count = int.matches('.').count();
 
         match count {
             0 => match int.parse::<i32>() {
