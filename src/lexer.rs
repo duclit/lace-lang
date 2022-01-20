@@ -148,7 +148,6 @@ impl Tokenizer {
     }
 
     fn add_token(&mut self, value: Value, start: usize) {
-        println!("Added token: {:?}", value);
         self.tokens
             .push(Token::new(value, self.line_i, start, self.current_i))
     }
@@ -282,7 +281,6 @@ impl Tokenizer {
                                 & !whitespace.is_match(ch.to_string().as_str())
                             {
                                 self.advance();
-                                println!("{}, {}, {}", ch, following, self.current);
                             }
 
                             match (ch, following) {
@@ -314,8 +312,6 @@ impl Tokenizer {
                                     }
                                 }
                             }
-
-                            println!("{}", self.current);
                         }
                     }
                 }
