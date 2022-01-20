@@ -73,6 +73,14 @@ pub fn run(
 
                 stack.push(arithmetic::operate(&a, &b, opcode.clone(), context));
             }
+            OpCode::BuildList(len) => {
+                let mut values: Vec<Value> = vec![];
+
+                for _ in 1..len {
+                    values.push(stack.pop().unwrap())
+                }
+                stack.push(Value::Array(values))
+            }
             OpCode::CallMacro(idx, arg_len) => {
                 if let Value::String(name) = &function.constants[idx] {
                     let mut arguments: Vec<Value> = vec![];
