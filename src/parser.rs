@@ -10,11 +10,14 @@ use std::mem::discriminant;
 pub enum Node {
     Unary(Value),
     Binary(Box<Node>, Box<Node>, String),
+
+    Array(Vec<Node>),
+    FunctionCall(String, Vec<Node>),
+    MacroCall(String, Vec<Node>),
+    
     VariableInit(String, Box<Node>, bool),
     VariableAssign(String, Box<Node>),
     Return(Box<Node>),
-    FunctionCall(String, Vec<Node>),
-    MacroCall(String, Vec<Node>),
 }
 
 #[derive(Debug, Clone)]
@@ -277,6 +280,25 @@ impl Parser {
                 },
                 None => self.raise("Expected expression."),
             },
+            Value::LSquare => {
+                let mut elements: Vec<Node> = vec![];
+
+                match self.expect_token(Value::RSquare, true) {
+                    Ok(_) => {}
+                    Err(_) => {
+                        elements.push(self.expression());
+
+                        while let Ok(_) = self.consume_token(Value::Comma) {
+                            self.advance();
+                            elements.push(self.expression());
+                        }
+                    }
+                }
+
+                self.consume(Value::RSquare, "Expected ']' after function call.");
+
+                Node::Array(elements)
+            }
             _ => self.raise("Unexpected token."),
         }
     }
