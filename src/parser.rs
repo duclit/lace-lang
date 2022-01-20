@@ -9,6 +9,7 @@ use std::mem::discriminant;
 #[derive(Debug, Clone)]
 pub enum Node {
     Unary(Value),
+    Conversion(Box<Node>, Type),
     Binary(Box<Node>, Box<Node>, String),
 
     Array(Vec<Node>),
@@ -30,7 +31,7 @@ pub struct BinaryNode {
 #[derive(Debug, Clone)]
 pub struct Function {
     pub name: String,
-    pub args: Vec<(String, bool, Type)>,
+    pub args: Vec<(String, bool)>,
     pub body: Vec<Node>,
     pub file: String,
     pub local_functions: HashMap<String, Function>,
@@ -74,10 +75,9 @@ impl Parser {
         if (!exact && discriminant(&self.current.value) == discriminant(&value))
             || (exact && self.current.value == value)
         {
-            let res = Ok(self.current.value.clone());
-            return res;
+            Ok(self.current.value.clone())
         } else {
-            return Err(());
+            Err(())
         }
     }
 
@@ -89,7 +89,7 @@ impl Parser {
             }
         }
 
-        return Err(());
+        Err(())
     }
 
     // same as expect_exact_tokens, but raises an error if the token is not found.
@@ -132,7 +132,7 @@ impl Parser {
             return Err(());
         }
 
-        return Ok(());
+        Ok(())
     }
 
     fn consume(&mut self, value: Value, err: &str) -> Value {
@@ -163,7 +163,7 @@ impl Parser {
     }
 
     // convert a token value representing a type to a type for the compiler/vm
-    fn to_type(&mut self, value: Value) -> Type {
+    fn to_type(&self, value: Value) -> Type {
         match value {
             Value::TypeBool => Type::Bool,
             Value::TypeFloat => Type::Float,
@@ -205,7 +205,7 @@ impl Parser {
             }
         }
 
-        return block;
+        block
     }
 
     pub fn literal(&mut self) -> Node {
@@ -219,7 +219,7 @@ impl Parser {
             | Value::None => {
                 let val = Node::Unary(self.current.value.clone());
                 self.advance();
-                return val;
+                val
             }
             Value::MacroIdentifier(name) => {
                 self.expect(
@@ -236,7 +236,7 @@ impl Parser {
                     Err(_) => {
                         arguments.push(self.expression());
 
-                        while let Ok(_) = self.consume_token(Value::Comma) {
+                        while self.consume_token(Value::Comma).is_ok() {
                             self.advance();
                             arguments.push(self.expression());
                         }
@@ -246,7 +246,7 @@ impl Parser {
                 self.consume(Value::RParen, "Expected ')' after function call.");
                 self.advance();
 
-                Node::MacroCall(name.to_string(), arguments)
+                Node::MacroCall(name, arguments)
             }
             Value::Identifier(name) => match self.tokens_iter.peek() {
                 Some(token) => match token.value {
@@ -260,7 +260,7 @@ impl Parser {
                             Err(_) => {
                                 arguments.push(self.expression());
 
-                                while let Ok(_) = self.consume_token(Value::Comma) {
+                                while self.consume_token(Value::Comma).is_ok() {
                                     self.advance();
                                     arguments.push(self.expression());
                                 }
@@ -269,7 +269,7 @@ impl Parser {
 
                         self.consume(Value::RParen, "Expected ')' after function call.");
 
-                        Node::FunctionCall(name.to_string(), arguments)
+                        Node::FunctionCall(name, arguments)
                     }
                     _ => {
                         let val = Node::Unary(self.current.value.clone());
@@ -281,14 +281,14 @@ impl Parser {
             },
             Value::LSquare => {
                 let mut elements: Vec<Node> = vec![];
-                
+
                 self.advance();
                 match self.expect_token(Value::RSquare, true) {
                     Ok(_) => {}
                     Err(_) => {
                         elements.push(self.expression());
 
-                        while let Ok(_) = self.consume_token(Value::Comma) {
+                        while self.consume_token(Value::Comma).is_ok() {
                             self.advance();
                             elements.push(self.expression());
                         }
@@ -304,12 +304,35 @@ impl Parser {
         }
     }
 
+    fn conversion(&mut self) -> Node {
+        let node = self.literal();
+
+        if self.consume_token(Value::KeywordAs).is_ok() {
+            let tipe = self.expect_exact(
+                vec![
+                    Value::TypeBool,
+                    Value::TypeFloat,
+                    Value::TypeInt,
+                    Value::TypeString,
+                    Value::TypeArray,
+                ],
+                "Expected type.",
+            );
+
+            self.advance();
+
+            Node::Conversion(Box::new(node), self.to_type(tipe))
+        } else {
+            node
+        }
+    }
+
     // helper function for parsing binary expression.
     // builder -> the function you want to use to parse the left and right sides
     // operators -> the operators you recognize on this precedence level
     pub fn binary_expression(&mut self, builder: &str, operators: Vec<Value>) -> Node {
         let mut left = match builder {
-            "literal" => self.literal(),
+            "literal" => self.conversion(),
             "additive" => self.additive_expr(),
             "multiplicative" => self.multiplicative_expr(),
             _ => raise_internal("0024"),
@@ -320,7 +343,7 @@ impl Parser {
             self.advance();
 
             let right = match builder {
-                "literal" => self.literal(),
+                "literal" => self.conversion(),
                 "additive" => self.additive_expr(),
                 "multiplicative" => self.multiplicative_expr(),
                 _ => raise_internal("0025"),
@@ -333,7 +356,7 @@ impl Parser {
             );
         }
 
-        return left;
+        left
     }
 
     pub fn multiplicative_expr(&mut self) -> Node {
@@ -386,13 +409,13 @@ impl Parser {
                     let name: String = name.extract().unwrap();
 
                     // name of the arguments, whether the argument is mutable, type of the argument
-                    let mut arguments: Vec<(String, bool, Type)> = Vec::new();
+                    let mut arguments: Vec<(String, bool)> = Vec::new();
 
                     self.expect(Value::LParen, true, "Expected '(' after function name.");
                     self.advance();
 
-                    while &self.current.value != &Value::RParen {
-                        let mut argument: (String, bool, Type) = (String::new(), false, Type::Any);
+                    while self.current.value != Value::RParen {
+                        let mut argument: (String, bool) = (String::new(), false);
 
                         match &self.current.value {
                             Value::KeywordMut => {
@@ -406,12 +429,12 @@ impl Parser {
                                 argument.0 = name;
                                 argument.1 = true;
 
-                                match self.advance() {
-                                    Some(token) => match token.value {
+                                if let Some(token) = self.advance() {
+                                    match token.value {
                                         Value::Colon => {
                                             self.advance();
 
-                                            let tipe = match self.expect_exact_tokens(vec![
+                                            match self.expect_exact_tokens(vec![
                                                 Value::TypeInt,
                                                 Value::TypeBool,
                                                 Value::TypeFloat,
@@ -421,14 +444,6 @@ impl Parser {
                                                 Result::Err(_) => self.raise("Expected type."),
                                             };
 
-                                            match tipe {
-                                                Value::TypeInt => argument.2 = Type::Integer,
-                                                Value::TypeBool => argument.2 = Type::Bool,
-                                                Value::TypeFloat => argument.2 = Type::Float,
-                                                Value::TypeString => argument.2 = Type::String,
-                                                _ => {}
-                                            }
-
                                             self.advance();
                                         }
                                         Value::Comma => {
@@ -436,20 +451,19 @@ impl Parser {
                                         }
                                         Value::RParen => {}
                                         _ => self.raise("Expected comma."),
-                                    },
-                                    None => {}
+                                    }
                                 }
                             }
                             Value::Identifier(name) => {
                                 argument.0 = name.to_string();
                                 argument.1 = false;
 
-                                match self.advance() {
-                                    Some(token) => match token.value {
+                                if let Some(token) = self.advance() {
+                                    match token.value {
                                         Value::Colon => {
                                             self.advance();
 
-                                            let tipe = match self.expect_exact_tokens(vec![
+                                            match self.expect_exact_tokens(vec![
                                                 Value::TypeInt,
                                                 Value::TypeBool,
                                                 Value::TypeFloat,
@@ -459,14 +473,6 @@ impl Parser {
                                                 Result::Err(_) => self.raise("Expected type."),
                                             };
 
-                                            match tipe {
-                                                Value::TypeInt => argument.2 = Type::Integer,
-                                                Value::TypeBool => argument.2 = Type::Bool,
-                                                Value::TypeFloat => argument.2 = Type::Float,
-                                                Value::TypeString => argument.2 = Type::String,
-                                                _ => {}
-                                            }
-
                                             self.advance();
                                         }
                                         Value::Comma => {
@@ -474,8 +480,7 @@ impl Parser {
                                         }
                                         Value::RParen => {}
                                         _ => self.raise("Expected comma."),
-                                    },
-                                    None => {}
+                                    }
                                 }
                             }
                             _ => {
@@ -579,6 +584,7 @@ impl Parser {
                 | Value::Int(_)
                 | Value::Float(_)
                 | Value::String(_)
+                | Value::LSquare
                 | Value::FormattedString(_) => chunk.body.push(self.expression()),
                 _ => {}
             }
