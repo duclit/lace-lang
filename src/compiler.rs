@@ -12,12 +12,12 @@ fn to_literal(value: &lexer::Value) -> Value {
         lexer::Value::Int(int) => Value::Integer(int),
         lexer::Value::Float(float) => Value::Float(float),
         lexer::Value::Identifier(iden) => Value::String(iden),
-        _ => raise_internal("0001"),
+        _ => raise_internal("00"),
     }
 }
 
-fn get_operator_opcode(op: &String) -> OpCode {
-    match op.as_str() {
+fn get_operator_opcode(op: &str) -> OpCode {
+    match op {
         "+" => OpCode::Add,
         "-" => OpCode::Sub,
         "*" => OpCode::Mul,
@@ -32,7 +32,7 @@ fn get_operator_opcode(op: &String) -> OpCode {
         ">=" => OpCode::MoreOrEqual,
         ">" => OpCode::More,
         "<" => OpCode::Less,
-        _ => raise_internal("02"),
+        _ => raise_internal("01"),
     }
 }
 
@@ -41,7 +41,7 @@ pub fn compile_expression(tree: &Node, code: &mut CodeObject) {
         Node::Binary(left, right, op) => {
             compile_expression(left, code);
             compile_expression(right, code);
-            code.add_code(get_operator_opcode(&op));
+            code.add_code(get_operator_opcode(op));
         }
         Node::Unary(value) => match value {
             lexer::Value::False | lexer::Value::True | lexer::Value::None => {
@@ -49,7 +49,7 @@ pub fn compile_expression(tree: &Node, code: &mut CodeObject) {
                     lexer::Value::None => 0,
                     lexer::Value::True => 1,
                     lexer::Value::False => 2,
-                    _ => raise_internal("0025"),
+                    _ => raise_internal("02"),
                 }));
             }
             _ => {
@@ -65,6 +65,20 @@ pub fn compile_expression(tree: &Node, code: &mut CodeObject) {
                 }
             }
         },
+        Node::Conversion(node, tipe) => {
+            compile_expression(node, code);
+
+            let type_idx = match tipe {
+                crate::vm::opcode::Type::Integer => 0,
+                crate::vm::opcode::Type::Float => 1,
+                crate::vm::opcode::Type::String => 2,
+                crate::vm::opcode::Type::Array => 3,
+                crate::vm::opcode::Type::Bool => 4,
+                crate::vm::opcode::Type::None => 5,
+            };
+
+            code.add_code(OpCode::ConvertTo(type_idx))
+        }
         Node::Array(arr) => {
             for element in arr {
                 compile_expression(element, code);
@@ -77,7 +91,7 @@ pub fn compile_expression(tree: &Node, code: &mut CodeObject) {
             let name_idx = code.add_constant(Value::String(name.to_string()));
 
             for argument in arguments {
-                compile_expression(&argument, code);
+                compile_expression(argument, code);
             }
 
             code.add_code(OpCode::CallMacro(name_idx, args_len));
