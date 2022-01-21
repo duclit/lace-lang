@@ -1,4 +1,3 @@
-use crate::lexer::Token;
 use std::process::exit;
 
 // context for an error, passed into the raise function
@@ -47,12 +46,6 @@ pub fn raise_rng(err: &str, ctx: Context, len: usize) -> ! {
     }
 
     println!("Error: {}", err);
-    exit(0);
-}
-
-// raised when something goes wrong unexpectedly in the pipeline
-pub fn raise_internal(code: &str) -> ! {
-    println!("An unexpected error has occured (#{})", code);
     exit(0);
 }
 
