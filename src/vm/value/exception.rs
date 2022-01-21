@@ -2,12 +2,12 @@ use crate::vm::opcode::Value;
 
 pub fn get_type(value: &Value) -> String {
     match value {
-        Value::String(_) => "string".to_string(),
-        Value::Integer(_) => "integer".to_string(),
-        Value::Float(_) => "float".to_string(),
-        Value::Array(_) => "array".to_string(),
-        Value::Bool(_) => "bool".to_string(),
-        Value::None => "none".to_string(),
+        Value::String(_) => "String".to_string(),
+        Value::Integer(_) => "Int".to_string(),
+        Value::Float(_) => "Float".to_string(),
+        Value::Array(_) => "Array".to_string(),
+        Value::Bool(_) => "Bool".to_string(),
+        Value::None => "None".to_string(),
     }
 }
 
