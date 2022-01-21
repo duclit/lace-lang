@@ -1,5 +1,5 @@
 use super::exception::*;
-use crate::error::{raise_internal, Data};
+use crate::error::Data;
 use crate::vm::opcode::{OpCode, Value};
 
 // custom function for epxonentiating i64
@@ -260,6 +260,6 @@ pub fn operate(a: &Value, b: &Value, code: OpCode, context: Data) -> Value {
         OpCode::Less => less(a, b, context),
         OpCode::MoreOrEqual => more_than(a, b, context),
         OpCode::LessOrEqual => less_than(a, b, context),
-        _ => raise_internal("04"),
+        _ => panic!(""),
     }
 }
