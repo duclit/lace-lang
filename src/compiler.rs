@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use crate::error::raise_internal;
 use crate::lexer;
 use crate::parser::{Function, Node};
 use crate::vm::opcode::{CodeObject, OpCode, Value};
@@ -12,7 +11,7 @@ fn to_literal(value: &lexer::Value) -> Value {
         lexer::Value::Int(int) => Value::Integer(int),
         lexer::Value::Float(float) => Value::Float(float),
         lexer::Value::Identifier(iden) => Value::String(iden),
-        _ => raise_internal("00"),
+        _ => panic!("Couldn't convert '{:?}' to literal.", value),
     }
 }
 
@@ -32,7 +31,7 @@ fn get_operator_opcode(op: &str) -> OpCode {
         ">=" => OpCode::MoreOrEqual,
         ">" => OpCode::More,
         "<" => OpCode::Less,
-        _ => raise_internal("01"),
+        _ => panic!(""),
     }
 }
 
@@ -49,7 +48,7 @@ pub fn compile_expression(tree: &Node, code: &mut CodeObject) {
                     lexer::Value::None => 0,
                     lexer::Value::True => 1,
                     lexer::Value::False => 2,
-                    _ => raise_internal("02"),
+                    _ => panic!(""),
                 }));
             }
             _ => {
@@ -96,7 +95,7 @@ pub fn compile_expression(tree: &Node, code: &mut CodeObject) {
 
             code.add_code(OpCode::CallMacro(name_idx, args_len));
         }
-        _ => raise_internal("0022"),
+        _ => panic!(""),
     }
 }
 
