@@ -1,4 +1,4 @@
-use crate::error::{raise_internal, raise_rng, Context};
+use crate::error::{raise_rng, Context};
 use crate::lexer::{Extract, Token, Value};
 use crate::vm::opcode::Type;
 
@@ -158,7 +158,7 @@ impl Parser {
             Value::OpLessEq => "<=".to_string(),
             Value::OpLShift => "<<".to_string(),
             Value::OpRShift => ">>".to_string(),
-            _ => raise_internal("00"),
+            _ => panic!("Unknown operator '{:?}'.", operator),
         }
     }
 
@@ -169,7 +169,7 @@ impl Parser {
             Value::TypeFloat => Type::Float,
             Value::TypeInt => Type::Integer,
             Value::TypeString => Type::String,
-            _ => raise_internal("01"),
+            _ => panic!("Unknown type '{:?}'.", value),
         }
     }
 
@@ -335,7 +335,7 @@ impl Parser {
             "literal" => self.conversion(),
             "additive" => self.additive_expr(),
             "multiplicative" => self.multiplicative_expr(),
-            _ => raise_internal("0024"),
+            _ => panic!("[1] An invalid builder was provided ('{}')", builder),
         };
 
         while operators.contains(&self.current.value) {
@@ -346,7 +346,7 @@ impl Parser {
                 "literal" => self.conversion(),
                 "additive" => self.additive_expr(),
                 "multiplicative" => self.multiplicative_expr(),
-                _ => raise_internal("0025"),
+                _ => panic!("[2] An invalid builder was provided ('{}')", builder),
             };
 
             left = Node::Binary(
