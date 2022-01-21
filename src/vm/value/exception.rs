@@ -1,4 +1,3 @@
-use crate::error::raise_internal;
 use crate::vm::opcode::Value;
 
 pub fn get_type(value: &Value) -> String {
@@ -32,7 +31,7 @@ pub fn unsupported_conversion(a: &Value, b: u8) -> String {
             3 => "Array",
             4 => "Bool",
             5 => "None",
-            _ => raise_internal("0026"),
+            _ => panic!(""),
         }
     )
 }
