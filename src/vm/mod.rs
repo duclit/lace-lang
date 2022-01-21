@@ -2,7 +2,7 @@ pub mod r#macro;
 pub mod opcode;
 pub mod value;
 
-use crate::error::{raise_internal, Data};
+use crate::error::Data;
 use crate::vm::opcode::*;
 
 use std::collections::HashMap;
@@ -53,7 +53,7 @@ pub fn run(
                 0 => stack.push(Value::None),
                 1 => stack.push(Value::Bool(true)),
                 2 => stack.push(Value::Bool(false)),
-                _ => raise_internal("05"),
+                _ => panic!(""),
             },
             OpCode::Add
             | OpCode::Sub
@@ -108,7 +108,7 @@ pub fn run(
                     let value = macrow.get(name.as_str()).unwrap()(arguments);
                     stack.push(value);
                 } else {
-                    raise_internal("06")
+                    panic!("");
                 }
             }
             OpCode::CallFunction(idx, arg_len) => {
@@ -154,7 +154,7 @@ pub fn run(
                     let res = run(func.clone(), args_map, Option::Some(global_functions));
                     stack.push(res);
                 } else {
-                    raise_internal("07")
+                    panic!("");
                 }
             }
             _ => {}
