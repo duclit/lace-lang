@@ -1,8 +1,5 @@
 Lace is an efficient, modern and predictable procedural programming language written in [rust](https://www.rust-lang.org/).
-
 - Easy to write: Lace's syntax is easy to learn and write, saving you development time.
-
-
 - <code>Speed benchmarks and WASM compiler coming soon.</code>
 
 ### Features
