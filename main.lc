@@ -1,4 +1,12 @@
-fn raise(error: string) {
-    writeln!(error);
-    exit!();
+// Definitely how you should load integers in your program
+fn loadInteger(n: number) {
+    let a: any = 0 
+    
+    while a < n {
+        a = a + 1
+    }
+
+    return a
 }
+
+writeln!(loadInteger(42))
