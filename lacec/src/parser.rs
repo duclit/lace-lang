@@ -165,6 +165,21 @@ impl<'p> Parser<'p> {
         )
     }
 
+    // The highest level of a bitwise operation, scans only for bitwise OR
+    fn bitwise_expression_1(&mut self) -> Node {
+        self.binary_expression("bitwise_xor", vec![Token::BitwiseOr])
+    }
+
+    // The second highest level of a bitwise operation, scans only for bitwise XOR
+    fn bitwise_expression_2(&mut self) -> Node {
+        self.binary_expression("bitwise_and", vec![Token::BitwiseXor])
+    }
+
+    // The lowest level of a bitwise operation, scans only for bitwise AND
+    fn bitwise_expression_3(&mut self) -> Node {
+        self.binary_expression("comparison", vec![Token::BitwiseAnd])
+    }
+
     fn additive_expression(&mut self) -> Node {
         self.binary_expression("multiplicative", vec![Token::OpAdd, Token::OpSub])
     }
@@ -261,6 +276,17 @@ impl<'p> Parser<'p> {
                 self.advance();
                 Node::Value(Value::NodeArray(elements))
             }
+            Token::LeftParen => {
+                let expression = self.expression();
+
+                match self.current {
+                    Token::RightParen => {}
+                    _ => self.error("Expected ')' after expression."),
+                }
+
+                self.advance();
+                expression
+            }
 
             Token::True => Node::Value(Value::True),
             Token::False => Node::Value(Value::False),
@@ -294,6 +320,9 @@ impl<'p> Parser<'p> {
             "additive" => self.additive_expression(),
             "comparison" => self.comparison_expression(),
             "multiplicative" => self.multiplicative_expression(),
+            "bitwise_or" => self.bitwise_expression_1(),
+            "bitwise_xor" => self.bitwise_expression_2(),
+            "bitwise_and" => self.bitwise_expression_3(),
             _ => panic!("Unknown builder '{}'", builder),
         }
     }
