@@ -3,3 +3,6 @@ Lace is an efficient, modern and predictable procedural programming language wri
 * Blazingly fast - Static-typing and a rust-like GC allows lace to be faster than most interpreted languages.
 
 > This project is under development, and the above points might not be true yet.
+
+### Why is this repo dead?
+This repository won't see much activity for about a month, while I prepare for exams and also properly plan lace's pipeline.
