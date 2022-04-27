@@ -1,7 +1,7 @@
 use logos::Logos;
 
 #[derive(Logos, Debug, PartialEq, Clone)]
-pub(crate) enum Token {
+pub enum Token {
     // Brackets
     #[token("{")]
     LeftCurly,
@@ -43,6 +43,8 @@ pub(crate) enum Token {
     KwOr,
     #[token("while")]
     KwWhile,
+    #[token("use")]
+    KwUse,
 
     // Builtin Values
     #[token("true")]
@@ -101,14 +103,8 @@ pub(crate) enum Token {
     // Literals
     // #[regex(r#"0b([0-9]+)"#, |lex|lex .slice().parse())]
     // Byte(i8),
-    #[regex(r#"[0-9]*\.[0-9]+"#, |lex| lex.slice().parse())]
-    Float(f32),
-    #[regex("0x[0-9a-fA-F]+", |lex| {
-        let without_prefix = lex.slice().trim_start_matches("0x");
-        i32::from_str_radix(without_prefix, 16)
-    })]
-    #[regex("[0-9]+", |lex| lex.slice().parse())]
-    Number(i32),
+    #[regex(r#"([0-9]*\.[0-9]+)|([0-9]*)"#, |lex| lex.slice().parse())]
+    Number(f64),
     #[regex("\"([^\"]*)\"", |lex| lex.slice().to_string())]
     #[regex("'([^\"]*)'", |lex| lex.slice().to_string())]
     String(String),
