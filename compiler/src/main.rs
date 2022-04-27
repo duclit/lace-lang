@@ -3,15 +3,18 @@ mod error;
 mod optimizer;
 mod parser;
 mod scanner;
+mod typecheck;
 
 pub mod pipeline;
 
 fn main() {
-    pipeline::lace_pipeline_init(
+    let ast = pipeline::lace_pipeline_init(
         "
-        fn some(argument: number, argument?: number, mut argument?: number) {
-
-        }
+        let something: string = \"string\" * 5
+        let happiness: number = something + \" something else\" 
         ",
     );
+
+    let mut typechecker = typecheck::Typechecker::new();
+    typechecker.check(ast);
 }
