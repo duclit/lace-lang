@@ -5,30 +5,38 @@ use logos::Lexer;
 use std::mem::discriminant;
 
 /// Represents a unary operation
-#[derive(Debug)]
-pub(crate) enum Unary {
+#[derive(Debug, Clone)]
+pub enum Unary {
     Negate,
     Typeof,
     Not,
 }
 
-pub(crate) type Public = bool;
-pub(crate) type Mutable = bool;
+pub type Public = bool;
+pub type Mutable = bool;
 
-#[derive(Debug)]
-pub(crate) struct Parameter {
-    pub(crate) name: String,
-    pub(crate) mutable: bool,
-    pub(crate) optional: bool,
+#[derive(Debug, Clone, PartialEq)]
+pub enum Type {
+    StringType,
+    NumberType,
+    BoolType,
+    ArrayType(Box<Type>),
+    Void,
 }
 
-#[derive(Debug)]
-pub(crate) enum NodeValue {
+#[derive(Debug, Clone)]
+pub struct Parameter {
+    pub name: String,
+    pub mutable: bool,
+    pub datatype: Type,
+}
+
+#[derive(Debug, Clone)]
+pub enum NodeValue {
     // Values are integrated into NodeValue so that it's easier to type
     StringValue(String),
     IdentifierValue(String),
-    NumberValue(i32),
-    FloatValue(f32),
+    NumberValue(f64),
     BoolValue(bool),
     ArrayValue(Vec<NodeValue>),
     FunctionCall(String, Vec<NodeValue>),
@@ -37,17 +45,18 @@ pub(crate) enum NodeValue {
     Unary(Box<NodeValue>, Unary),
     Binary(Box<NodeValue>, Box<NodeValue>, Token),
 
-    FunctionDecleration(String, Vec<Node>, Vec<Parameter>, Public),
-    VariableDecleration(String, Box<NodeValue>, Public, Mutable),
+    FunctionDecleration(String, Vec<Node>, Vec<Parameter>, Public, Type),
+    VariableDecleration(String, Box<NodeValue>, Public, Mutable, Type),
     VariableAssignment(String, Box<NodeValue>),
-    WhileStatement(Box<NodeValue>, Vec<Node>)
+    WhileStatement(Box<NodeValue>, Vec<Node>),
+    ImportStatement(String, String),
 }
 
 /// Contains a NodeValue along with additional metadata, like which line the node was on.
-#[derive(Debug)]
-pub(crate) struct Node {
-    pub(crate) inner: NodeValue,
-    pub(crate) line: usize,
+#[derive(Debug, Clone)]
+pub struct Node {
+    pub inner: NodeValue,
+    pub line: usize,
 }
 
 impl Node {
@@ -56,17 +65,17 @@ impl Node {
     }
 }
 
-pub(crate) struct Parser<'a> {
+pub struct Parser<'a> {
     source: String,
 
     // Just used to determine the current line index
     line: usize,
     last: usize,
 
-    pub(crate) ast: Vec<Node>,
-    pub(crate) tokens: Lexer<'a, Token>,
+    pub ast: Vec<Node>,
+    pub tokens: Lexer<'a, Token>,
 
-    pub(crate) current: Token,
+    pub current: Token,
 }
 
 impl<'p> Parser<'p> {
@@ -111,13 +120,13 @@ impl<'p> Parser<'p> {
         }
     }
 
-    /// Extremely dirty function to get certain data to display an error message.
     fn get_error_data(&mut self) -> (String, String, String, usize, &str) {
         let span = self.tokens.span();
         let mut line = 0;
         let lines: Vec<&str> = self.source.split('\n').collect();
         let mut last_n = 0;
 
+        // please forgive me
         for (i, character) in self.source.char_indices() {
             if i == span.start {
                 break;
@@ -175,7 +184,6 @@ impl<'p> Parser<'p> {
 
         match current {
             Token::Number(num) => Node::new(NodeValue::NumberValue(num), self.line),
-            Token::Float(flt) => Node::new(NodeValue::FloatValue(flt), self.line),
             Token::True => Node::new(NodeValue::BoolValue(true), self.line),
             Token::False => Node::new(NodeValue::BoolValue(false), self.line),
             Token::String(ref str) => Node::new(NodeValue::StringValue(str.to_string()), self.line),
@@ -361,30 +369,20 @@ impl<'p> Parser<'p> {
         self.logical_expression()
     }
 
-    fn parse_type(&mut self) {
-        let _type = if let Token::Identifier(_type) = &self.current {
-            _type.clone()
+    fn parse_type(&mut self) -> Type {
+        if let Token::Identifier(_type) = &self.current {
+            let datatype = match _type.clone().as_str() {
+                "number" => Type::NumberType,
+                "bool" => Type::BoolType,
+                "string" => Type::StringType,
+                _ => self.error("Unknown type."),
+            };
+
+            self.advance();
+            return datatype;
         } else {
             self.error("Expected Identifier");
         };
-
-        if self.advance() == Token::LeftSquare {
-            match self.advance() {
-                Token::RightSquare => {
-                    self.advance();
-
-                    while self.current == Token::LeftSquare {
-                        match self.advance() {
-                            Token::RightSquare => {
-                                self.advance();
-                            }
-                            _ => self.error("Expected ']' after array type."),
-                        }
-                    }
-                }
-                _ => self.error("Expected ']' after array type."),
-            }
-        }
     }
 
     fn variable_decleration(&mut self, public: bool) -> Node {
@@ -397,21 +395,10 @@ impl<'p> Parser<'p> {
             _ => self.error("Expected either 'mut' or Identifier."),
         };
 
-        match self.advance() {
-            Token::Assign => {
+        let datatype = match self.advance() {
+            Token::Colon => {
                 self.advance();
-            }
-            _ => {
-                match self.current {
-                    Token::Colon => {
-                        self.advance();
-                    }
-                    _ => {
-                        self.error("Expected either ':' or '='");
-                    }
-                }
-
-                self.parse_type();
+                let dt = self.parse_type();
 
                 match self.current {
                     Token::Assign => {
@@ -421,13 +408,22 @@ impl<'p> Parser<'p> {
                         self.error("Expected '='");
                     }
                 }
+
+                dt
             }
-        }
+            _ => self.error("Expected ':'"),
+        };
 
         let value = self.expression();
 
         Node {
-            inner: NodeValue::VariableDecleration(name, Box::new(value.inner), public, is_mutable),
+            inner: NodeValue::VariableDecleration(
+                name,
+                Box::new(value.inner),
+                public,
+                is_mutable,
+                datatype,
+            ),
             line: self.line,
         }
     }
@@ -459,36 +455,36 @@ impl<'p> Parser<'p> {
             match &self.current {
                 Token::Identifier(_) | Token::KwMut => {
                     let (name, mutable) = match self.current.clone() {
-                        Token::Identifier(iden) => (iden, false),
-                        Token::KwMut => {
+                        Token::Identifier(iden) => {
                             self.advance();
-                            (
-                                match &self.current {
-                                    Token::Identifier(str) => str.clone(),
-                                    _ => self.error("Invalid identifier"),
-                                },
-                                true,
-                            )
+                            (iden, false)
                         }
+                        Token::KwMut => (
+                            match self.advance() {
+                                Token::Identifier(str) => {
+                                    self.advance();
+                                    str.clone()
+                                }
+                                _ => self.error("Expected identifier"),
+                            },
+                            true,
+                        ),
                         _ => panic!(),
                     };
 
-                    let mut optional = false;
+                    println!("{:?}", self.current);
 
-                    if self.advance() == Token::Que {
-                        optional = true;
-                        self.advance();
+                    if self.current != Token::Colon {
+                        self.error("Expected ':' after parameter name.");
                     }
 
-                    if self.current == Token::Colon {
-                        self.advance();
-                        self.parse_type();
-                    }
+                    self.advance();
+                    let datatype = self.parse_type();
 
                     let param = Parameter {
                         name,
                         mutable,
-                        optional,
+                        datatype,
                     };
 
                     params.push(param);
@@ -504,13 +500,14 @@ impl<'p> Parser<'p> {
         if let Token::Identifier(name) = name {
             self.advance();
 
-            match self.current {
+            let return_type = match self.current {
                 Token::LeftCurly => {
                     self.advance();
+                    Type::Void
                 }
                 Token::Colon => {
                     self.advance();
-                    self.parse_type();
+                    let return_type = self.parse_type();
 
                     match self.current {
                         Token::LeftCurly => {
@@ -518,9 +515,11 @@ impl<'p> Parser<'p> {
                         }
                         _ => self.error("Expected '{'"),
                     }
+
+                    return_type
                 }
                 _ => self.error("Expected ':' or '{'"),
-            }
+            };
 
             let mut body = Vec::new();
 
@@ -531,7 +530,7 @@ impl<'p> Parser<'p> {
             self.advance();
 
             Node {
-                inner: NodeValue::FunctionDecleration(name, body, params, public),
+                inner: NodeValue::FunctionDecleration(name, body, params, public, return_type),
                 line: self.line,
             }
         } else {
@@ -562,6 +561,27 @@ impl<'p> Parser<'p> {
         }
     }
 
+    fn import_statement(&mut self) -> Node {
+        self.expect(Token::String(String::new()), false);
+
+        if let Token::String(path) = self.current.clone() {
+            self.expect(Token::KwAs, true);
+            self.expect(Token::Identifier(String::new()), false);
+
+            if let Token::Identifier(name) = self.current.clone() {
+                self.advance();
+                Node {
+                    inner: NodeValue::ImportStatement(path, name),
+                    line: self.line,
+                }
+            } else {
+                self.error("Expected path to file.");
+            }
+        } else {
+            self.error("Expected path to file.");
+        }
+    }
+
     fn statement(&mut self) -> Node {
         match self.current {
             Token::KwLet => self.variable_decleration(false),
@@ -572,6 +592,7 @@ impl<'p> Parser<'p> {
                 _ => self.error("Expected 'let' or 'fn' after 'pub'"),
             },
             Token::KwWhile => self.while_statement(),
+            Token::KwUse => self.import_statement(),
             Token::Identifier(_) => {
                 /*  Lines that start with identifiers can either be assignments or expressions.
                     Therefore, we parse an expression, and if expression is a sole identifier and
@@ -590,7 +611,6 @@ impl<'p> Parser<'p> {
                 }
             }
             Token::Number(_)
-            | Token::Float(_)
             | Token::String(_)
             | Token::FormattedString(_)
             | Token::PrimitiveFnIdentifier(_)
