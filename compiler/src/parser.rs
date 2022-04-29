@@ -14,13 +14,14 @@ pub enum Unary {
 
 pub type Public = bool;
 pub type Mutable = bool;
+pub type ConditionalBlock = (Box<NodeValue>, Vec<Node>);
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
-    StringType,
-    NumberType,
-    BoolType,
-    ArrayType(Box<Type>),
+    String,
+    Number,
+    Bool,
+    Array(Box<Type>),
     Void,
 }
 
@@ -45,11 +46,14 @@ pub enum NodeValue {
     Unary(Box<NodeValue>, Unary),
     Binary(Box<NodeValue>, Box<NodeValue>, Token),
 
+    GetAttribute(Box<NodeValue>, String),
+
     FunctionDecleration(String, Vec<Node>, Vec<Parameter>, Public, Type),
     VariableDecleration(String, Box<NodeValue>, Public, Mutable, Type),
     VariableAssignment(String, Box<NodeValue>),
     WhileStatement(Box<NodeValue>, Vec<Node>),
     ImportStatement(String, String),
+    If(ConditionalBlock, Vec<ConditionalBlock>, Option<Vec<Node>>),
 }
 
 /// Contains a NodeValue along with additional metadata, like which line the node was on.
@@ -372,9 +376,9 @@ impl<'p> Parser<'p> {
     fn parse_type(&mut self) -> Type {
         if let Token::Identifier(_type) = &self.current {
             let datatype = match _type.clone().as_str() {
-                "number" => Type::NumberType,
-                "bool" => Type::BoolType,
-                "string" => Type::StringType,
+                "number" => Type::Number,
+                "bool" => Type::Bool,
+                "string" => Type::String,
                 _ => self.error("Unknown type."),
             };
 
@@ -582,6 +586,70 @@ impl<'p> Parser<'p> {
         }
     }
 
+    fn if_statement(&mut self) -> Node {
+        self.advance();
+        let condition = self.expression();
+
+        if self.current != Token::LeftCurly {
+            self.error("Expected '{' after if statement.");
+        }
+
+        self.advance();
+        let mut body: Vec<Node> = vec![];
+
+        while self.current != Token::RightCurly {
+            body.push(self.statement());
+        }
+
+        self.advance();
+
+        let mut else_body: Vec<Node> = vec![];
+        let mut else_if_bodies: Vec<ConditionalBlock> = vec![];
+
+        if self.current == Token::KwElse {
+            self.advance();
+
+            match self.current {
+                Token::LeftCurly => {
+                    self.advance();
+
+                    while self.current != Token::RightCurly {
+                        else_body.push(self.statement());
+                    }
+
+                    self.advance();
+                }
+                Token::KwIf => {
+                    let statement = self.if_statement();
+
+                    if let NodeValue::If(_if, elseif, _else) = statement.inner {
+                        else_if_bodies.push(_if);
+
+                        for body in elseif {
+                            else_if_bodies.push(body);
+                        }
+
+                        if let Option::Some(code) = _else {
+                            else_body = code;
+                        }
+                    }
+                }
+                _ => self.error("Expected '{' or 'if'."),
+            }
+        }
+
+        let else_body = if else_body.is_empty() {
+            None
+        } else {
+            Some(else_body)
+        };
+
+        Node {
+            inner: NodeValue::If((Box::new(condition.inner), body), else_if_bodies, else_body),
+            line: self.line,
+        }
+    }
+
     fn statement(&mut self) -> Node {
         match self.current {
             Token::KwLet => self.variable_decleration(false),
@@ -593,6 +661,7 @@ impl<'p> Parser<'p> {
             },
             Token::KwWhile => self.while_statement(),
             Token::KwUse => self.import_statement(),
+            Token::KwIf => self.if_statement(),
             Token::Identifier(_) => {
                 /*  Lines that start with identifiers can either be assignments or expressions.
                     Therefore, we parse an expression, and if expression is a sole identifier and
@@ -602,7 +671,7 @@ impl<'p> Parser<'p> {
 
                 if let NodeValue::IdentifierValue(iden) = &node.inner {
                     if self.current == Token::Assign {
-                        return self.variable_assignment(iden.clone());
+                        self.variable_assignment(iden.clone())
                     } else {
                         node
                     }
