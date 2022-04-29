@@ -10,14 +10,18 @@ pub struct Typechecker {
 }
 
 fn binary_return_type(op: &str, left: Type, right: Type) -> Result<Type, ()> {
-    use Type::*;
-
     match (op, left, right) {
-        (_, NumberType, NumberType) => Ok(NumberType),
-        (_, NumberType, BoolType) => Ok(NumberType),
-        (_, BoolType, NumberType) => Ok(NumberType),
-        ("+", StringType, StringType) => Ok(StringType),
-        ("*", StringType, NumberType) => Ok(StringType),
+        ("==", Type::Number, Type::Number) => Ok(Type::Bool),
+        ("==", Type::String, Type::String) => Ok(Type::Bool),
+        ("==", Type::Bool, Type::Bool) => Ok(Type::Bool),
+        ("!=", Type::Number, Type::Number) => Ok(Type::Bool),
+        ("!=", Type::String, Type::String) => Ok(Type::Bool),
+        ("!=", Type::Bool, Type::Bool) => Ok(Type::Bool),
+        (_, Type::Number, Type::Number) => Ok(Type::Number),
+        (_, Type::Number, Type::Bool) => Ok(Type::Number),
+        (_, Type::Bool, Type::Number) => Ok(Type::Number),
+        ("+", Type::String, Type::String) => Ok(Type::String),
+        ("*", Type::String, Type::Number) => Ok(Type::String),
         _ => Err(()),
     }
 }
@@ -49,9 +53,9 @@ impl Typechecker {
 
     fn get_value_type(&self, value: NodeValue) -> Type {
         match value {
-            NodeValue::NumberValue(_) => Type::NumberType,
-            NodeValue::BoolValue(_) => Type::BoolType,
-            NodeValue::StringValue(_) => Type::StringType,
+            NodeValue::NumberValue(_) => Type::Number,
+            NodeValue::BoolValue(_) => Type::Bool,
+            NodeValue::StringValue(_) => Type::String,
             NodeValue::IdentifierValue(iden) => {
                 let var = self.variables.get(&iden);
 
@@ -83,7 +87,7 @@ impl Typechecker {
         }
     }
 
-    fn initialise(&mut self, program: &Vec<Node>) {
+    fn initialise(&mut self, program: &[Node]) {
         for node in program.iter() {
             match node.inner.clone() {
                 NodeValue::FunctionDecleration(name, _, _, _, return_type) => {
@@ -106,6 +110,23 @@ impl Typechecker {
                         } else {
                             panic!("Expected type {:?}, got {:?}", annotation, return_type);
                         }
+                    } else {
+                        panic!("Error in variable decleration: Invalid Types.")
+                    }
+                }
+                NodeValue::If(_if, _elseif, _else) => {
+                    let if_type = self.eval_binary_expression((*_if.0).clone());
+                    
+                    if let Err(_) = if_type {
+                        panic!("Error in if statement (IF): Invalid types")
+                    }
+
+                    for (condition, _) in _elseif {
+                        let if_type = self.eval_binary_expression((*condition).clone());
+                    
+                        if let Err(_) = if_type {
+                            panic!("Error in if statement (ELSEIF): Invalid types")
+                        } 
                     }
                 }
                 _ => {}
