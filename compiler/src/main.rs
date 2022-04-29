@@ -11,7 +11,17 @@ fn main() {
     let ast = pipeline::lace_pipeline_init(
         "
         let something: string = \"string\" * 5
-        let happiness: number = something + \" something else\" 
+        let happiness: string = something + \" something else\"
+
+        if something == happiness {
+            print(\"yes\")
+        } else if something != happiness {
+            print(\"no\")
+        } else if something == happiness {
+            print(\"damn\")
+        } else {
+            print(\"ok\")
+        }
         ",
     );
 
