@@ -1,12 +1,12 @@
-// Definitely how you should load integers in your program
-fn loadInteger(n: number) {
-    let a: any = 0 
-    
-    while a < n {
-        a = a + 1
-    }
+let something: string = \"string\" * 5
+let happiness: string = something + \" something else\"
 
-    return a
+if something == happiness {
+    print(\"yes\")
+} else if something != happiness {
+    print(\"no\")
+} else if something == happiness {
+    print(\"damn\")
+} else {
+    print(\"ok\")
 }
-
-writeln!(loadInteger(42))
