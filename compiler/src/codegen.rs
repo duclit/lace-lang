@@ -121,6 +121,10 @@ pub fn compile(ast: Vec<Node>) -> Vec<HlvmHirInstruction> {
                     compile(body),
                 ));
             }
+            NodeValue::Return(value) => {
+                instructions.append(&mut compile_value(*value));
+                instructions.push(HlvmHirInstruction::ReturnValue);
+            }
 
             NodeValue::StringValue(..)
             | NodeValue::NumberValue(..)
