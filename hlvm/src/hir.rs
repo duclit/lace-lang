@@ -198,7 +198,18 @@ pub fn from_hir(source: Vec<HlvmHirInstruction>) -> Vec<HlvmInstruction> {
                     }
                 }
             }
-            _ => todo!()
+            HlvmHirInstruction::WhileStatement(condition, body) => {
+                instructions.append(&mut from_hir(condition));
+                instructions.push(HlvmInstruction::Not);
+                let start_offset = instructions.len() - 1;
+                instructions.push(HlvmInstruction::JumpIf(0)); // END
+
+                instructions.append(&mut from_hir(body));
+                instructions.push(HlvmInstruction::Jump(start_offset)); // START
+                let end_offset = instructions.len();
+
+                instructions[start_offset + 1] = HlvmInstruction::JumpIf(end_offset);
+            }
         }
     }
 
