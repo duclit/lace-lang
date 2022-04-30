@@ -41,6 +41,7 @@ pub enum NodeValue {
     BoolValue(bool),
     ArrayValue(Vec<NodeValue>),
     FunctionCall(String, Vec<NodeValue>),
+    PrimitiveFunctionCall(usize, Vec<NodeValue>),
     NoneValue,
 
     Unary(Box<NodeValue>, Unary),
@@ -251,7 +252,41 @@ impl<'p> Parser<'p> {
                 self.advance();
                 expression
             }
-            _ => todo!(),
+            Token::PrimitiveFnIdentifier(iden) => match self.current {
+                Token::LeftParen => {
+                    self.advance();
+                    let mut arguments: Vec<NodeValue> = vec![];
+
+                    if !(self.current == Token::RightParen) {
+                        arguments.push(self.expression().inner);
+
+                        while self.current == Token::Comma {
+                            self.advance();
+
+                            if !(self.current == Token::RightParen) {
+                                arguments.push(self.expression().inner);
+                            }
+                        }
+                    }
+
+                    let idx: usize = match iden.as_str() {
+                        "print!" => 0,
+                        "exit!" => 1,
+                        _ => unimplemented!(),
+                    };
+
+                    self.advance();
+                    Node {
+                        inner: NodeValue::PrimitiveFunctionCall(idx, arguments),
+                        line: self.line,
+                    }
+                }
+                _ => self.error("Expected '('")
+            }
+            a => {
+                println!("{:?}", a);
+                todo!()
+            },
         }
     }
 
