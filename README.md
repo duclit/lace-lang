@@ -1,5 +1,5 @@
 ## The Lace Programming Language
-Lace is a procedural programming language written in rust, designed to be efficient and a breeze to use.
+Lace is a procedural programming language written in [rust](https://www.rust-lang.org/), designed to be efficient and a breeze to use.
 
 * Feature Complete - The standard library has everything you need to get started with lace.
 * Easy to read and write - Beautiful abstracted syntax with syntactic sugar helps you write short, clean and concise code.
