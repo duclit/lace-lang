@@ -125,6 +125,27 @@ pub fn compile(ast: Vec<Node>) -> Vec<HlvmHirInstruction> {
                 instructions.append(&mut compile_value(*value));
                 instructions.push(HlvmHirInstruction::ReturnValue);
             }
+            NodeValue::FunctionDecleration(name, body, params, ..) => {
+                let mut parameters = vec![];
+
+                for parameter in params {
+                    parameters.push(parameter.name);
+                }
+
+                let function = HlvmValue::Function(from_hir(compile(body)), parameters, None);
+
+                instructions.push(HlvmHirInstruction::Push(function));
+                instructions.push(HlvmHirInstruction::SetGlobal(name));
+            }
+            // NodeValue::TypeDecleration(name, functions, variables) => {
+            //     let mut attributes = variables;
+
+            //     for function in functions {
+            //         if let NodeValue::FunctionDecleration(name, ..) = function {
+            //             
+            //         }
+            //     }
+            // }
 
             NodeValue::StringValue(..)
             | NodeValue::NumberValue(..)
