@@ -20,7 +20,7 @@ pub enum HlvmValue {
     String(String),
 
     StructInstance(HashMap<String, HlvmValue>),
-    StructBlueprint(Vec<String>),
+    StructBlueprint(HashMap<String, HlvmValue>),
 
     Function(Vec<HlvmInstruction>, Arguments, LocalPreAlloc),
     BuiltInFunction(usize, usize),
@@ -55,6 +55,7 @@ pub enum HlvmInstruction {
     /// Returns the value at the top of the stack
     ReturnValue,
 
+    Get(String),
     GetLocal(String),
     GetGlobal(String),
     SetLocal(String),
