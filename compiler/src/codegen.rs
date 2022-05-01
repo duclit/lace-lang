@@ -37,7 +37,7 @@ fn compile_value(value: NodeValue) -> Vec<HlvmHirInstruction> {
             instructions.push(HlvmHirInstruction::Push(HlvmValue::Bool(bool)))
         }
         NodeValue::IdentifierValue(iden) => {
-            instructions.push(HlvmHirInstruction::GetGlobal(iden));
+            instructions.push(HlvmHirInstruction::Get(iden));
         }
         NodeValue::FunctionCall(function, mut arguments) => {
             arguments.reverse();
@@ -47,7 +47,8 @@ fn compile_value(value: NodeValue) -> Vec<HlvmHirInstruction> {
                 arguemnts_hir.append(&mut compile_value(argument));
             }
 
-            instructions.push(HlvmHirInstruction::GetGlobal(function));
+            instructions.append(&mut arguemnts_hir);
+            instructions.push(HlvmHirInstruction::Get(function));
             instructions.push(HlvmHirInstruction::Call)
         }
         NodeValue::PrimitiveFunctionCall(index, mut arguments) => {
@@ -87,11 +88,11 @@ pub fn compile(ast: Vec<Node>) -> Vec<HlvmHirInstruction> {
         match node.inner {
             NodeValue::VariableDecleration(name, value, ..) => {
                 instructions.append(&mut compile_value(*value));
-                instructions.push(HlvmHirInstruction::SetGlobal(name));
+                instructions.push(HlvmHirInstruction::SetLocal(name));
             }
             NodeValue::VariableAssignment(name, value) => {
                 instructions.append(&mut compile_value(*value));
-                instructions.push(HlvmHirInstruction::SetGlobal(name));
+                instructions.push(HlvmHirInstruction::SetLocal(name));
             }
             NodeValue::If(ontrue, onelseif, onfalse) => {
                 let ontrue_body = compile(ontrue.1);
@@ -135,7 +136,15 @@ pub fn compile(ast: Vec<Node>) -> Vec<HlvmHirInstruction> {
                 let function = HlvmValue::Function(from_hir(compile(body)), parameters, None);
 
                 instructions.push(HlvmHirInstruction::Push(function));
-                instructions.push(HlvmHirInstruction::SetGlobal(name));
+                instructions.push(HlvmHirInstruction::SetLocal(name));
+            }
+            NodeValue::StructInit(name, arguments) => {
+                for argument in arguments {
+                    instructions.append(&mut compile_value(argument.1.inner));
+                }
+
+                instructions.push(HlvmHirInstruction::Get(name));
+                instructions.push(HlvmHirInstruction::Instantiate);
             }
             // NodeValue::TypeDecleration(name, functions, variables) => {
             //     let mut attributes = variables;
