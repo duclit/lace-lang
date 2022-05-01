@@ -45,6 +45,12 @@ pub enum Token {
     KwWhile,
     #[token("use")]
     KwUse,
+    #[token("if")]
+    KwIf,
+    #[token("else")]
+    KwElse,
+    #[token("new")]
+    KwNew,
 
     // Builtin Values
     #[token("true")]
@@ -99,6 +105,8 @@ pub enum Token {
     Comma,
     #[token("?")]
     Que,
+    #[token(".")]
+    Period,
 
     // Literals
     // #[regex(r#"0b([0-9]+)"#, |lex|lex .slice().parse())]
