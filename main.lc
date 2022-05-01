@@ -1,10 +1,10 @@
-let something: number = 3
-let happiness: number = 7
+fn print_stuff(a: number) {
+    print!(a)
+}
 
-if happiness < something {
-    print!("a")
-} else if false {
-    print!("b")
-} else if true {
-    print!("c")
+let i: number = 0 
+
+while i < 100 {
+    i = i + 1
+    print_stuff(i)
 }
