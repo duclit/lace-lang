@@ -23,19 +23,7 @@ use hashbrown::HashMap;
 impl Initializable for HlvmValue {
     fn initialize(&self, stack: &mut Vec<HlvmValue>) -> Result<HlvmValue, String> {
         match *self {
-            HlvmValue::StructBlueprint(ref attributes) => {
-                let mut values = HashMap::new();
-
-                // Attributes must be reversed because of how stacks work
-                let mut attrs = attributes.clone();
-                attrs.reverse();
-
-                for attribute in attrs {
-                    values.insert(attribute, stack.pop().unwrap());
-                }
-
-                Ok(HlvmValue::StructInstance(values))
-            }
+            HlvmValue::StructBlueprint(ref attributes) => Ok(HlvmValue::StructInstance(attributes.clone())),
             _ => Err(format!("Cannot initialize value {:?}", self)),
         }
     }
