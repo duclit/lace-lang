@@ -116,17 +116,17 @@ impl Typechecker {
                 }
                 NodeValue::If(_if, _elseif, _else) => {
                     let if_type = self.eval_binary_expression((*_if.0).clone());
-                    
+
                     if let Err(_) = if_type {
                         panic!("Error in if statement (IF): Invalid types")
                     }
 
                     for (condition, _) in _elseif {
                         let if_type = self.eval_binary_expression((*condition).clone());
-                    
+
                         if let Err(_) = if_type {
                             panic!("Error in if statement (ELSEIF): Invalid types")
-                        } 
+                        }
                     }
                 }
                 _ => {}
