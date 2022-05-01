@@ -2,6 +2,7 @@ use crate::error::*;
 use crate::scanner::Token;
 use colored::*;
 use logos::Lexer;
+use std::collections::HashMap;
 use std::mem::discriminant;
 
 /// Represents a unary operation
@@ -51,10 +52,13 @@ pub enum NodeValue {
 
     FunctionDecleration(String, Vec<Node>, Vec<Parameter>, Public, Type),
     VariableDecleration(String, Box<NodeValue>, Public, Mutable, Type),
+    // Name, Functions, Attributes
+    TypeDecleration(String, Vec<NodeValue>, HashMap<String, NodeValue>),
     VariableAssignment(String, Box<NodeValue>),
     WhileStatement(Box<NodeValue>, Vec<Node>),
     ImportStatement(String, String),
     If(ConditionalBlock, Vec<ConditionalBlock>, Option<Vec<Node>>),
+    Return(Box<NodeValue>),
 }
 
 /// Contains a NodeValue along with additional metadata, like which line the node was on.
@@ -685,6 +689,60 @@ impl<'p> Parser<'p> {
         }
     }
 
+    fn return_statement(&mut self) -> Node {
+        self.advance();
+        let value = self.expression();
+
+        Node {
+            inner: NodeValue::Return(Box::new(value.inner)),
+            line: self.line,
+        }
+    }
+
+    fn type_decleration(&mut self) -> Node {
+        self.expect_handle(Token::Identifier(String::new()), false, "Expected Identifier");
+        let name = self.current.clone();
+        self.expect_handle(Token::LeftCurly, true, "Expected '{'");
+        self.advance();
+
+        let mut functions: Vec<NodeValue> = vec![];
+        let mut variables: HashMap<String, NodeValue> = HashMap::new();
+
+        while self.current != Token::RightCurly {
+            let node = match self.current {
+                Token::KwLet => self.variable_decleration(false),
+                Token::KwFn => self.function_decleration(false),
+                Token::KwPub => match self.advance() {
+                    Token::KwLet => self.variable_decleration(true),
+                    Token::KwFn => self.function_decleration(true),
+                    _ => self.error("Expected 'let' or 'fn' after 'pub'"),
+                },
+                _ => self.error("Unexpected token")
+            };
+
+            match node.inner {
+                NodeValue::VariableDecleration(ref name, ..) => {
+                    variables.insert(name.clone(), node.inner.clone());
+                },
+                NodeValue::FunctionDecleration(..) => {
+                    functions.push(node.inner.clone());
+                },
+                _ => panic!(),
+            }
+        }
+
+        self.advance();
+
+        if let Token::Identifier(name) = name {
+            return Node {
+                inner: NodeValue::TypeDecleration(name, functions, variables),
+                line: self.line,
+            };
+        } else {
+            panic!()
+        }
+    }
+
     fn statement(&mut self) -> Node {
         match self.current {
             Token::KwLet => self.variable_decleration(false),
@@ -697,6 +755,8 @@ impl<'p> Parser<'p> {
             Token::KwWhile => self.while_statement(),
             Token::KwUse => self.import_statement(),
             Token::KwIf => self.if_statement(),
+            Token::KwReturn => self.return_statement(),
+            Token::KwType => self.type_decleration(),
             Token::Identifier(_) => {
                 /*  Lines that start with identifiers can either be assignments or expressions.
                     Therefore, we parse an expression, and if expression is a sole identifier and
@@ -725,7 +785,7 @@ impl<'p> Parser<'p> {
             | Token::KwTypeof
             | Token::OpBang
             | Token::OpSub => self.expression(),
-            _ => todo!(),
+            ref unimplemented => todo!("{:?}", unimplemented),
         }
     }
 
