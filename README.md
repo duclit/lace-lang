@@ -9,4 +9,4 @@ Lace is a procedural programming language written in [rust](https://www.rust-lan
 * [Playground]() - Try lace online!
 * [Install]() - Install the lace compiler & interpreter.
 
-Track progress on the [github project](https://github.com/users/duclit/projects/2) or [contact me](https://discord.com/users/960515298308554782) on discord for questions/suggestions.
+Track progress on the [trello board](https://trello.com/b/FHhOZgmZ) or [contact me](https://discord.com/users/960515298308554782) on discord for questions/suggestions.
