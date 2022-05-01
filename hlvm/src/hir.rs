@@ -19,6 +19,7 @@ pub enum HlvmHirInstruction {
     /// Returns the value at the top of the stack
     ReturnValue,
 
+    Get(String),
     GetLocal(String),
     GetGlobal(String),
     SetLocal(String),
@@ -100,6 +101,9 @@ pub fn from_hir(source: Vec<HlvmHirInstruction>) -> Vec<HlvmInstruction> {
             }
             HlvmHirInstruction::GetGlobal(name) => {
                 instructions.push(HlvmInstruction::GetGlobal(name))
+            }
+            HlvmHirInstruction::Get(name) => {
+                instructions.push(HlvmInstruction::Get(name))
             }
             HlvmHirInstruction::SetLocal(name) => {
                 instructions.push(HlvmInstruction::SetLocal(name))
@@ -199,16 +203,17 @@ pub fn from_hir(source: Vec<HlvmHirInstruction>) -> Vec<HlvmInstruction> {
                 }
             }
             HlvmHirInstruction::WhileStatement(condition, body) => {
+                let start_offset = instructions.len();
                 instructions.append(&mut from_hir(condition));
                 instructions.push(HlvmInstruction::Not);
-                let start_offset = instructions.len() - 1;
+                let jmpif_offset = instructions.len();
                 instructions.push(HlvmInstruction::JumpIf(0)); // END
 
                 instructions.append(&mut from_hir(body));
                 instructions.push(HlvmInstruction::Jump(start_offset)); // START
                 let end_offset = instructions.len();
 
-                instructions[start_offset + 1] = HlvmInstruction::JumpIf(end_offset);
+                instructions[jmpif_offset] = HlvmInstruction::JumpIf(end_offset);
             }
         }
     }
