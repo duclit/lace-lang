@@ -44,6 +44,7 @@ pub enum NodeValue {
     FunctionCall(String, Vec<NodeValue>),
     PrimitiveFunctionCall(usize, Vec<NodeValue>),
     NoneValue,
+    StructInit(String, Vec<(String, Node)>),
 
     Unary(Box<NodeValue>, Unary),
     Binary(Box<NodeValue>, Box<NodeValue>, Token),
@@ -286,6 +287,34 @@ impl<'p> Parser<'p> {
                     }
                 }
                 _ => self.error("Expected '('")
+            }
+            Token::KwNew => match self.advance() {
+                Token::Identifier(typename) => {
+                    let mut arguments: Vec<(String, Node)> = vec![];
+                    self.advance();
+
+                    while !(self.advance() == Token::RightParen) {
+                        if let Token::Identifier(ref iden) = self.current {
+                            let iden = iden.clone();
+
+                            if let Token::Colon = self.advance() {
+                                let expression = self.expression();
+                                arguments.push((iden, expression));
+                            } else {
+                                self.error("Expected ':'");
+                            }
+                        } else {
+                            self.error("Expected identifier");
+                        }
+                    }
+
+                    self.advance();
+                    Node {
+                        inner: NodeValue::StructInit(typename, arguments),
+                        line: self.line,
+                    }
+                },
+                _ => self.error("Expected identifier.")
             }
             a => {
                 println!("{:?}", a);
