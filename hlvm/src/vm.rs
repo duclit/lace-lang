@@ -91,6 +91,17 @@ impl HighLevelVirtualMachine {
                 GetLocal(name) => self
                     .stack
                     .push(self.get_local_scope().get(name).unwrap().clone()),
+                Get(name) => {
+                    let val = match self.get_global_scope().get(name) {
+                        Some(a) => a,
+                        None => match self.get_local_scope().get(name) {
+                            Some(a) => a,
+                            None => panic!()
+                        },
+                    };
+
+                    self.stack.push(val.clone());
+                }
 
                 /* Returning values */
                 ReturnValue => return Ok(self.stack.pop().unwrap()),
