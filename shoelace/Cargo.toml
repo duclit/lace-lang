@@ -7,4 +7,7 @@ edition = "2021"
 
 [dependencies]
 compiler = { path = "../compiler" }
+hlvm = { path = "../hlvm" }
 colored = "2.0.0"
+bincode = "1.0"
+serde = { version = "1.0", features = ["derive"] }
